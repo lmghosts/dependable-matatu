@@ -1,14 +1,19 @@
+import { getDeviceId }          from './lib/device-id.js';
+import { enqueue, flushQueue }  from './lib/offline-queue.js';
+import { fetchAggregates, submitReport } from './lib/supabase.js';
+
 const el = id => document.getElementById(id);
 
 // ─── State ─────────────────────────────────────────────────
 const state = {
-  route: '',
-  from: '',
-  to: '',
-  fare: '',
+  route:    '',
+  from:     '',
+  to:       '',
+  fare:     '',
+  deviceId: null,
 };
 
-// ─── Known routes for the form ─────────────────────────────
+// ─── Routes ────────────────────────────────────────────────
 const ROUTES = [
   { id: 'R104', name: 'Route 104 — City Cabanas → Kahawa Sukari' },
   { id: 'R58',  name: 'Route 58 — CBD → JKIA' },
@@ -17,141 +22,133 @@ const ROUTES = [
   { id: 'R45',  name: 'Route 45 — Githurai → Kasarani' },
 ];
 
-// ─── Fake crowdsourced data (Phase 2 will pull from Supabase) ──
-const FARE_DATA = {
-  R104: { min: 50, max: 80, mode: 70, reports: 24, confidence: 76,
-    breakdown: [
-      { amount: 50, count: 3 }, { amount: 60, count: 5 },
-      { amount: 70, count: 11 }, { amount: 80, count: 5 },
-    ]},
-  R58:  { min: 100, max: 150, mode: 120, reports: 11, confidence: 54,
-    breakdown: [
-      { amount: 100, count: 4 }, { amount: 120, count: 5 }, { amount: 150, count: 2 },
-    ]},
-};
+// ─── Fare card ─────────────────────────────────────────────
+function renderFareCardLoading() {
+  return `<div class="fare-info-card" style="text-align:center;padding:18px">
+    <div class="spinner" style="margin:0 auto 8px"></div>
+    <span style="font-size:12px;color:var(--text-secondary)">Loading fares…</span>
+  </div>`;
+}
 
-// ─── Render fare card from cached data ─────────────────────
-function renderFareCard(routeId) {
-  const data = FARE_DATA[routeId];
-  if (!data || data.reports < 5) {
-    return `
-      <div class="empty-state" style="padding:20px 16px">
-        <div class="empty-state__icon"><svg><use href="#icon-info"/></svg></div>
-        <div class="empty-state__title">Not enough reports yet</div>
-        <p class="empty-state__sub">
-          At least 5 fare reports are needed before a range is shown.
-          Be the first to report this route!
-        </p>
-      </div>`;
-  }
+function renderFareCardEmpty() {
+  return `
+    <div class="empty-state" style="padding:20px 16px">
+      <div class="empty-state__icon"><svg><use href="#icon-info"/></svg></div>
+      <div class="empty-state__title">No reports yet</div>
+      <p class="empty-state__sub">
+        Be the first to report a fare on this route!
+        Minimum 3 reports needed before a P50 fare is shown.
+      </p>
+    </div>`;
+}
 
-  const { min, max, confidence, reports, breakdown } = data;
-  const maxCount = Math.max(...breakdown.map(r => r.count));
+function renderFareCardData(aggregates) {
+  if (!aggregates.length) return renderFareCardEmpty();
+
+  const total = aggregates.reduce((s, r) => s + r.sample_count, 0);
+  const rows = aggregates.slice(0, 5).map(r => `
+    <div class="breakdown-row">
+      <span class="breakdown-amount" style="min-width:140px;font-size:11px">
+        ${r.from_stop} → ${r.to_stop}
+      </span>
+      <span style="font-size:13px;font-weight:600;color:var(--text-primary)">
+        KSh ${r.p50_kes}
+      </span>
+      <span class="breakdown-pct">${r.sample_count}×</span>
+    </div>`).join('');
 
   return `
     <div class="fare-info-card">
-      <div class="fare-info-card__route">${routeId.replace('R', 'Route ')}</div>
-      <div class="fare-range">
-        KSh ${min}<span class="fare-range__sep">–</span>${max}
+      <div class="fare-info-card__route">Crowd-sourced fares (P50)</div>
+      <div style="margin-top:4px;margin-bottom:12px">
+        <div class="breakdown-card">${rows}</div>
       </div>
-      <div class="confidence-bar-wrap">
-        <div class="confidence-bar">
-          <div class="confidence-fill" style="width:${confidence}%"></div>
-        </div>
-        <span class="confidence-pct">${confidence}%</span>
-      </div>
-      <p style="font-size:11px;color:var(--text-secondary);margin-top:6px">${reports} crowd-sourced reports</p>
-    </div>
-
-    <div class="breakdown-section" style="padding:0 16px 12px">
-      <div class="breakdown-header">Fare breakdown</div>
-      <div class="breakdown-card">
-        ${breakdown.map(row => `
-          <div class="breakdown-row">
-            <span class="breakdown-amount">KSh ${row.amount}</span>
-            <div class="breakdown-bar-outer">
-              <div class="breakdown-bar-inner" style="width:${Math.round(row.count / maxCount * 100)}%"></div>
-            </div>
-            <span class="breakdown-pct">${Math.round(row.count / reports * 100)}%</span>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
+      <p style="font-size:11px;color:var(--text-secondary);margin:0">
+        ${total} report${total === 1 ? '' : 's'} · updated daily
+      </p>
+    </div>`;
 }
 
-// ─── Form validation ───────────────────────────────────────
+async function loadFareCard(routeId) {
+  const card = el('fares-fare-card');
+  if (!card) return;
+  card.hidden = false;
+  card.innerHTML = renderFareCardLoading();
+
+  try {
+    const aggs = await fetchAggregates(routeId);
+    if (card.parentElement) card.innerHTML = renderFareCardData(aggs);
+  } catch {
+    if (card.parentElement) card.innerHTML = renderFareCardEmpty();
+  }
+}
+
+// ─── Submit ────────────────────────────────────────────────
 function syncSubmitBtn() {
   const btn = el('fares-submit');
   if (!btn) return;
-  const valid = state.route && state.from && state.to && state.fare
-    && Number(state.fare) >= 10 && Number(state.fare) <= 999;
+  const valid = state.route && state.from.trim() && state.to.trim()
+    && state.fare && Number(state.fare) >= 10 && Number(state.fare) <= 999;
   btn.disabled = !valid;
 }
 
-// ─── Submit handler ────────────────────────────────────────
-function handleSubmit() {
-  const fare = Number(state.fare);
-  const routeId = state.route;
-  const now = Date.now();
+async function handleSubmit() {
+  const btn = el('fares-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
 
-  // Optimistic local update
-  const data = FARE_DATA[routeId];
-  if (data) {
-    const existing = data.breakdown.find(r => r.amount === fare);
-    if (existing) {
-      existing.count++;
+  const payload = {
+    device_id: state.deviceId,
+    route_id:  state.route,
+    from_stop: state.from.trim().toLowerCase(),
+    to_stop:   state.to.trim().toLowerCase(),
+    fare_kes:  Number(state.fare),
+  };
+
+  let queued = false;
+  try {
+    if (navigator.onLine) {
+      await submitReport(payload);
     } else {
-      data.breakdown.push({ amount: fare, count: 1 });
-      data.breakdown.sort((a, b) => a.amount - b.amount);
+      await enqueue(payload);
+      queued = true;
     }
-    data.reports++;
-    data.confidence = Math.min(99, data.confidence + 2);
+  } catch (err) {
+    // Network error or server error — queue for retry
+    console.warn('[fares] submit failed, queuing:', err.message);
+    await enqueue(payload).catch(() => {});
+    queued = true;
   }
 
-  // Show success state
-  showSuccess(routeId, fare);
-
-  // TODO (Phase 2): enqueue to Supabase via Background Sync
-  // offlineQueue.push({ routeId, from: state.from, to: state.to, fare, ts: now });
+  showSuccess(payload.fare_kes, queued);
 }
 
-function showSuccess(routeId, fare) {
+function showSuccess(fare, queued) {
   const section = el('fares-form-section');
-
-  // Re-render with updated fare card + success message
   section.innerHTML = `
-    ${renderFareCard(routeId)}
     <div class="success-card" id="fares-success">
-      <div class="success-card__icon">
-        <svg><use href="#icon-check"/></svg>
-      </div>
+      <div class="success-card__icon"><svg><use href="#icon-check"/></svg></div>
       <div class="success-card__title">KSh ${fare} reported</div>
       <p class="success-card__sub">
-        Thank you! Your report helps other commuters know what to expect.
+        ${queued
+          ? 'Saved offline — will sync when you reconnect.'
+          : 'Thank you! Your report helps other commuters.'}
       </p>
     </div>
     <div style="padding:0 16px;margin-bottom:12px">
       <button class="submit-btn" id="fares-report-another">Report another fare</button>
     </div>
   `;
+  el('fares-report-another').addEventListener('click', renderForm);
 
-  el('fares-report-another').addEventListener('click', () => {
-    renderForm();
-  });
-
-  // Auto-clear after 3 s
-  setTimeout(() => {
-    el('fares-success')?.remove();
-  }, 3000);
+  setTimeout(() => el('fares-success')?.remove(), 3000);
 }
 
-// ─── Form rendering ────────────────────────────────────────
+// ─── Form ──────────────────────────────────────────────────
 function renderForm() {
   state.route = '';
-  state.from = '';
-  state.to = '';
-  state.fare = '';
+  state.from  = '';
+  state.to    = '';
+  state.fare  = '';
 
   el('fares-form-section').innerHTML = `
     <div class="form-section">
@@ -163,9 +160,7 @@ function renderForm() {
         </select>
       </div>
 
-      <div id="fares-fare-card" hidden>
-        <!-- Fare card injected when route is selected -->
-      </div>
+      <div id="fares-fare-card" hidden></div>
 
       <div class="form-label" style="margin-top:12px">Report a fare</div>
       <div class="form-card">
@@ -191,26 +186,20 @@ function renderForm() {
 
       <button class="submit-btn" id="fares-submit" disabled>Submit report</button>
       <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin-top:8px;padding:0 16px">
-        Reports are anonymous. Minimum 5 needed before fare ranges are shown.
+        Reports are anonymous. Fares are shown once 3+ reports exist per segment.
       </p>
     </div>
   `;
 
   el('fares-route-select').addEventListener('change', e => {
     state.route = e.target.value;
-    const card = el('fares-fare-card');
-    if (state.route) {
-      card.hidden = false;
-      card.innerHTML = renderFareCard(state.route);
-    } else {
-      card.hidden = true;
-    }
+    if (state.route) loadFareCard(state.route);
+    else { const c = el('fares-fare-card'); if (c) c.hidden = true; }
     syncSubmitBtn();
   });
-
-  el('fares-from').addEventListener('input', e => { state.from = e.target.value; syncSubmitBtn(); });
-  el('fares-to').addEventListener('input', e => { state.to = e.target.value; syncSubmitBtn(); });
-  el('fares-amount').addEventListener('input', e => { state.fare = e.target.value; syncSubmitBtn(); });
+  el('fares-from').addEventListener('input',   e => { state.from = e.target.value;  syncSubmitBtn(); });
+  el('fares-to').addEventListener('input',     e => { state.to   = e.target.value;  syncSubmitBtn(); });
+  el('fares-amount').addEventListener('input', e => { state.fare  = e.target.value; syncSubmitBtn(); });
   el('fares-submit').addEventListener('click', handleSubmit);
 }
 
@@ -226,6 +215,24 @@ function renderShell() {
 }
 
 // ─── Public init ───────────────────────────────────────────
-export function initFares() {
+export async function initFares() {
   renderShell();
+
+  // T9: Initialise stable anonymous device ID
+  try {
+    state.deviceId = await getDeviceId();
+  } catch (e) {
+    console.warn('[fares] device-id unavailable, using session fallback');
+    state.deviceId = `session-${crypto.randomUUID()}`;
+  }
+
+  // Flush any offline-queued reports if online
+  if (navigator.onLine) {
+    flushQueue(submitReport).catch(() => {});
+  }
+
+  // Re-flush when connectivity returns
+  window.addEventListener('online', () => {
+    flushQueue(submitReport).catch(() => {});
+  });
 }
