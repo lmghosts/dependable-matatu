@@ -1,0 +1,36 @@
+import { defineConfig } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
+
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
+      manifest: {
+        name: 'Dependable Matatu',
+        short_name: 'Matatu',
+        description: 'Plan your Nairobi matatu journey — offline-first',
+        theme_color: '#0E0F12',
+        background_color: '#0E0F12',
+        display: 'standalone',
+        orientation: 'portrait',
+        start_url: '/',
+        icons: [
+          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+        ],
+      },
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
+        globIgnores: ['graph/**'],
+      },
+    }),
+  ],
+  optimizeDeps: {
+    include: ['minotor'],
+  },
+  build: {
+    target: 'es2020',
+  },
+});

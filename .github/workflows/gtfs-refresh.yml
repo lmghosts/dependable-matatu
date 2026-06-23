@@ -1,0 +1,39 @@
+name: Refresh GTFS graph
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 1 AM UTC daily (4 AM Nairobi / EAT)
+  workflow_dispatch:       # Manual trigger
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Run GTFS pipeline
+        env:
+          GTFS_URL: ${{ secrets.GTFS_URL }}
+          GRAPH_DATE: ${{ env.TODAY }}
+        run: |
+          TODAY=$(date +%Y-%m-%d)
+          echo "TODAY=$TODAY" >> $GITHUB_ENV
+          node pipeline/fetch-gtfs.js
+
+      - name: Commit updated graph
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/graph/
+          git diff --staged --quiet || git commit -m "chore: refresh GTFS graph $(date +%Y-%m-%d)"
+          git push

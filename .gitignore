@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.vite/
+pipeline/_gtfs_tmp/
+pipeline/*.zip
+# Do not ignore public/graph — graph binaries are committed
+.gstack/
