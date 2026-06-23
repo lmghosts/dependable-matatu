@@ -720,7 +720,7 @@ svg { display: block; }
   width: 100%;
   padding: 15px;
   border-radius: 12px;
-  background: var(--accent);
+  background: var(--accent-flame);
   border: none;
   color: #fff;
   font-family: 'Space Grotesk', sans-serif;
