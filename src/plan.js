@@ -16,10 +16,9 @@ async function getRouteStops() {
 
 // ─── State ─────────────────────────────────────────────────
 const state = {
-  from: null,          // { stop, name }
+  from: null,        // { stop, name }
   to: null,
-  activeField: null,   // 'from' | 'to'
-  requestedTime: null, // string label when routing for a non-current time
+  activeField: null, // 'from' | 'to'
 };
 
 // ─── DOM helpers ───────────────────────────────────────────
@@ -165,7 +164,7 @@ function swapStops() {
 }
 
 // ─── Routing ───────────────────────────────────────────────
-async function findRoute(overrideTime) {
+async function findRoute() {
   if (!state.from || !state.to) return;
 
   setResultState('loading');
@@ -177,8 +176,7 @@ async function findRoute(overrideTime) {
   }
 
   try {
-    const depTime = overrideTime ?? Time.fromDate(new Date());
-    state.requestedTime = overrideTime ? overrideTime.toString().substring(0, 5) : null;
+    const depTime = Time.fromDate(new Date());
 
     const query = new Query.Builder()
       .from(state.from.stop.sourceStopId)
@@ -191,9 +189,7 @@ async function findRoute(overrideTime) {
     const route = result.bestRoute();
 
     if (!route) {
-      // If routing at current time fails, offer to try tomorrow morning
-      const isCurrentTime = !overrideTime;
-      setResultState('no-route', isCurrentTime);
+      setResultState('no-route');
       return;
     }
 
@@ -384,41 +380,28 @@ function setResultState(state, message) {
         </div>`;
       break;
 
-    case 'results': {
-      const timeLabel = state.requestedTime
-        ? `<span class="results-badge">Tomorrow ${state.requestedTime}</span>` : '';
+    case 'results':
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
           <div class="results-header">
             <span class="results-title">Best route</span>
-            ${timeLabel}
           </div>
           <div id="plan-results-list"></div>
         </div>`;
       break;
-    }
-      break;
 
-    case 'no-route': {
-      const offerTomorrow = arguments[1] !== false;
+    case 'no-route':
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="empty-state">
           <div class="empty-state__icon">
             <svg><use href="#icon-warning"/></svg>
           </div>
-          <div class="empty-state__title">No route right now</div>
-          <p class="empty-state__sub">No matatu connection at this hour. Services typically run 06:00–22:00.</p>
-          ${offerTomorrow ? `<button class="empty-state__cta" id="plan-try-morning">Show tomorrow 07:00</button>` : ''}
+          <div class="empty-state__title">No route found</div>
+          <p class="empty-state__sub">No matatu connection between these stops.</p>
         </div>`;
-      if (offerTomorrow) {
-        el('plan-try-morning')?.addEventListener('click', () => {
-          findRoute(Time.fromHM(7, 0));
-        });
-      }
       break;
-    }
 
     case 'offline':
       break; // unused — routing always attempted if graph is loaded
