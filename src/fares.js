@@ -140,7 +140,7 @@ function showSuccess(fare, queued) {
   `;
   el('fares-report-another').addEventListener('click', renderForm);
 
-  setTimeout(() => el('fares-success')?.remove(), 3000);
+  setTimeout(() => el('fares-success')?.remove(), 5000);
 }
 
 // ─── Form ──────────────────────────────────────────────────
