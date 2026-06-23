@@ -702,6 +702,32 @@ svg { display: block; }
 .number-field { -moz-appearance: textfield; }
 .number-field::-webkit-inner-spin-button { display: none; }
 
+/* ─── Route search dropdown ─── */
+.route-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  z-index: 100;
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+}
+.route-option {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-muted);
+  line-height: 1.4;
+}
+.route-option:last-child { border-bottom: none; }
+.route-option:hover, .route-option:active {
+  background: var(--surface);
+  color: var(--accent-flame);
+}
+
 .fare-row {
   display: flex;
   align-items: center;
