@@ -16,9 +16,10 @@ async function getRouteStops() {
 
 // ─── State ─────────────────────────────────────────────────
 const state = {
-  from: null,  // { stop, name }
+  from: null,          // { stop, name }
   to: null,
-  activeField: null,  // 'from' | 'to'
+  activeField: null,   // 'from' | 'to'
+  requestedTime: null, // string label when routing for a non-current time
 };
 
 // ─── DOM helpers ───────────────────────────────────────────
@@ -164,16 +165,10 @@ function swapStops() {
 }
 
 // ─── Routing ───────────────────────────────────────────────
-async function findRoute() {
+async function findRoute(overrideTime) {
   if (!state.from || !state.to) return;
 
-  // Show loading state
   setResultState('loading');
-
-  if (!navigator.onLine) {
-    setResultState('offline');
-    return;
-  }
 
   const router = getRouter();
   if (!router) {
@@ -182,33 +177,35 @@ async function findRoute() {
   }
 
   try {
-    const now = new Date();
-    const depTime = Time.fromDate(now);
+    const depTime = overrideTime ?? Time.fromDate(new Date());
+    state.requestedTime = overrideTime ? overrideTime.toString().substring(0, 5) : null;
 
     const query = new Query.Builder()
       .from(state.from.stop.sourceStopId)
       .to(state.to.stop.sourceStopId)
       .departureTime(depTime)
-      .maxTransfers(1)
+      .maxTransfers(2)
       .build();
 
     const result = router.route(query);
     const route = result.bestRoute();
 
     if (!route) {
-      setResultState('no-route');
+      // If routing at current time fails, offer to try tomorrow morning
+      const isCurrentTime = !overrideTime;
+      setResultState('no-route', isCurrentTime);
       return;
     }
 
     setResultState('results');
-    renderRoute(route);
+    renderRoute(route, depTime);
   } catch (err) {
     console.error('Routing error:', err);
     setResultState('error', 'Routing failed. Please try again.');
   }
 }
 
-function renderRoute(route) {
+function renderRoute(route, requestedTime) {
   const legs = route.legs;
   const dep = fmt(route.departureTime());
   const arr = fmt(route.arrivalTime());
@@ -387,48 +384,44 @@ function setResultState(state, message) {
         </div>`;
       break;
 
-    case 'results':
+    case 'results': {
+      const timeLabel = state.requestedTime
+        ? `<span class="results-badge">Tomorrow ${state.requestedTime}</span>` : '';
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
           <div class="results-header">
             <span class="results-title">Best route</span>
+            ${timeLabel}
           </div>
           <div id="plan-results-list"></div>
         </div>`;
       break;
+    }
+      break;
 
-    case 'no-route':
+    case 'no-route': {
+      const offerTomorrow = arguments[1] !== false;
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="empty-state">
           <div class="empty-state__icon">
             <svg><use href="#icon-warning"/></svg>
           </div>
-          <div class="empty-state__title">No route found</div>
-          <p class="empty-state__sub">No matatu connection between these stops today. Try different stops.</p>
+          <div class="empty-state__title">No route right now</div>
+          <p class="empty-state__sub">No matatu connection at this hour. Services typically run 06:00–22:00.</p>
+          ${offerTomorrow ? `<button class="empty-state__cta" id="plan-try-morning">Show tomorrow 07:00</button>` : ''}
         </div>`;
+      if (offerTomorrow) {
+        el('plan-try-morning')?.addEventListener('click', () => {
+          findRoute(Time.fromHM(7, 0));
+        });
+      }
       break;
+    }
 
     case 'offline':
-      resultsEl.hidden = false;
-      resultsEl.innerHTML = `
-        <div class="empty-state">
-          <div class="empty-state__icon">
-            <svg><use href="#icon-wifi-off"/></svg>
-          </div>
-          <div class="empty-state__title">You're offline</div>
-          <p class="empty-state__sub">The routing graph is cached — but timetable data may be stale. Results shown from last sync.</p>
-          <button class="empty-state__cta" id="plan-retry-offline">Try offline route</button>
-        </div>`;
-      el('plan-retry-offline')?.addEventListener('click', () => {
-        // Attempt routing anyway — graph may be cached
-        const router = getRouter();
-        if (router) {
-          findRoute();
-        }
-      });
-      break;
+      break; // unused — routing always attempted if graph is loaded
 
     case 'error':
       resultsEl.hidden = false;
