@@ -43,7 +43,7 @@ function renderStopsList(si, query) {
       <div class="list-item__icon"><svg><use href="#icon-pin"/></svg></div>
       <div class="list-item__body">
         <div class="list-item__name">${stop.name}</div>
-        <div class="list-item__sub">${stop.sourceStopId}</div>
+        <div class="list-item__sub">${stop.locationType === 'PARENT_STATION' ? 'Station' : 'Bus stop'}</div>
       </div>
       <div class="list-item__right"><svg><use href="#icon-chevron-right"/></svg></div>
     </button>

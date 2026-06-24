@@ -86,7 +86,7 @@ function renderSuggestions(query) {
           <div class="autocomplete-item__icon"><svg><use href="#icon-pin"/></svg></div>
           <div>
             <div class="autocomplete-item__name">${stop.name}</div>
-            <div class="autocomplete-item__sub">${stop.sourceStopId}</div>
+            <div class="autocomplete-item__sub">${stop.locationType === 'PARENT_STATION' ? 'Station' : 'Bus stop'}</div>
           </div>
         </button>
       `).join('')}
