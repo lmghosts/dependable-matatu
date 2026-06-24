@@ -114,6 +114,26 @@ svg { display: block; }
 }
 .view[hidden] { display: none; }
 
+/* Plan view: flex column so map can fill remaining space */
+#view-plan:not([hidden]) { display: flex; flex-direction: column; }
+
+/* ─── Route map background ─── */
+.plan-map-bg {
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+  pointer-events: none;
+  overflow: hidden;
+}
+.plan-map-bg[hidden] { display: none; }
+.route-map-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.065;
+}
+
 /* ─── Bottom nav ─── */
 .bottom-nav {
   display: flex;
@@ -897,6 +917,38 @@ svg { display: block; }
 }
 .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
 .submit-btn:not(:disabled):hover { opacity: .9; }
+
+/* ─── Route selected chip ─── */
+.route-chip[hidden] { display: none; }
+.route-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(46,196,240,.08);
+  border: 1px solid rgba(46,196,240,.25);
+  border-radius: 12px;
+}
+.route-chip__label {
+  flex: 1;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-sky);
+  line-height: 1.35;
+}
+.route-chip__clear {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 13px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.route-chip__clear:hover { color: var(--text-primary); background: var(--surface-2); }
 
 /* ─── Fare info card ─── */
 .fare-info-card {

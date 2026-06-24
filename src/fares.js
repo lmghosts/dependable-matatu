@@ -284,14 +284,17 @@ function renderForm() {
   el('fares-form-section').innerHTML = `
     <div class="form-section">
       <div class="form-label">Select route</div>
-      <div class="form-card" style="position:relative">
-        <input class="number-field" id="fares-route-search"
-          type="text" placeholder="Search routes… e.g. Westlands or 104"
-          autocomplete="off" style="margin-bottom:0" />
-        <div id="fares-route-dropdown" class="route-dropdown" hidden></div>
+      <div id="fares-search-area">
+        <div class="form-card" style="position:relative">
+          <input class="number-field" id="fares-route-search"
+            type="text" placeholder="Search routes… e.g. Westlands or 104"
+            autocomplete="off" style="margin-bottom:0" />
+          <div id="fares-route-dropdown" class="route-dropdown" hidden></div>
+        </div>
       </div>
-      <div id="fares-route-selected" hidden
-        style="font-size:12px;color:var(--accent-sky);padding:6px 4px 0">
+      <div id="fares-route-chip" class="route-chip" hidden>
+        <span id="fares-chip-label" class="route-chip__label"></span>
+        <button class="route-chip__clear" id="fares-chip-clear" aria-label="Change route">✕</button>
       </div>
 
       <div id="fares-fare-card" hidden></div>
@@ -342,19 +345,27 @@ function renderForm() {
 
   function selectRoute(id, name) {
     state.route = id;
-    searchInput.value = name;
     dropdown.hidden = true;
-    const label = el('fares-route-selected');
-    label.textContent = `✓ ${name}`;
-    label.hidden = false;
+    el('fares-search-area').hidden = true;
+    el('fares-chip-label').textContent = name;
+    el('fares-route-chip').hidden = false;
     loadFareCard(id);
     syncSubmitBtn();
   }
 
+  function clearRoute() {
+    state.route = '';
+    el('fares-route-chip').hidden = true;
+    el('fares-search-area').hidden = false;
+    el('fares-fare-card').hidden = true;
+    searchInput.value = '';
+    syncSubmitBtn();
+  }
+
+  el('fares-chip-clear').addEventListener('click', clearRoute);
+
   searchInput.addEventListener('input', e => {
     state.route = '';
-    const label = el('fares-route-selected');
-    if (label) label.hidden = true;
     showDropdown(e.target.value);
     syncSubmitBtn();
   });

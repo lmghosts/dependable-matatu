@@ -413,9 +413,71 @@ function closeLegDetail() {
   setTimeout(() => { sheet.hidden = true; }, 260);
 }
 
+// ─── Route map background (empty-state decoration) ─────────
+async function renderRouteMapBg() {
+  const mapDiv = el('plan-map-bg');
+  if (!mapDiv) return;
+  const si = getStopsIndex();
+  if (!si) return;
+
+  const routeStops = await getRouteStops();
+
+  // Build id → [lat, lon] by looking up each unique stop name directly
+  // (avoids the letter-prefix coverage gap of the autocomplete strategy)
+  const idToPos = new Map();
+  const unique = new Map(); // id → name
+  for (const stops of Object.values(routeStops)) {
+    for (const s of stops) {
+      if (!unique.has(s.id)) unique.set(s.id, s.name);
+    }
+  }
+
+  for (const [id, name] of unique) {
+    const hits = si.findStopsByName(name.slice(0, 6));
+    for (const r of hits) {
+      if (r.lat && r.lon && r.name.toLowerCase() === name.toLowerCase()) {
+        idToPos.set(id, [r.lat, r.lon]);
+        break;
+      }
+    }
+    // Fallback: accept any hit with the same sourceStopId
+    if (!idToPos.has(id)) {
+      const exact = si.findStopsByName(name).find(r => r.sourceStopId === id && r.lat);
+      if (exact) idToPos.set(id, [exact.lat, exact.lon]);
+    }
+  }
+
+  if (idToPos.size < 20) return;
+
+  const LAT_MIN = -1.46, LAT_MAX = -1.07;
+  const LON_MIN = 36.67, LON_MAX = 37.12;
+  const W = 400, H = 650;
+  const toX = lon => ((lon - LON_MIN) / (LON_MAX - LON_MIN) * W).toFixed(1);
+  const toY = lat => ((1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * H).toFixed(1);
+
+  const paths = [];
+  for (const stops of Object.values(routeStops)) {
+    const pts = stops.map(s => idToPos.get(s.id)).filter(Boolean);
+    if (pts.length < 2) continue;
+    const d = pts.map(([lat, lon], i) => `${i ? 'L' : 'M'}${toX(lon)},${toY(lat)}`).join('');
+    paths.push(`<path d="${d}"/>`);
+  }
+  if (!paths.length) return;
+
+  mapDiv.innerHTML = `<svg class="route-map-svg" viewBox="0 0 ${W} ${H}"
+    preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g fill="none" stroke="var(--accent-sky)" stroke-width="1"
+       stroke-linecap="round" stroke-linejoin="round">
+      ${paths.join('')}
+    </g>
+  </svg>`;
+}
+
 // ─── State machine ─────────────────────────────────────────
 function setResultState(mode, message) {
   const resultsEl = el('plan-results');
+  const mapEl = el('plan-map-bg');
+  if (mapEl) mapEl.hidden = (mode !== 'hidden');
 
   switch (mode) {
     case 'hidden':
@@ -538,6 +600,9 @@ function renderShell() {
       </button>
     </div>
 
+    <!-- Route map background (empty state) -->
+    <div id="plan-map-bg" class="plan-map-bg" aria-hidden="true"></div>
+
     <!-- Saved journeys -->
     <div id="plan-saved" class="saved-section" hidden></div>
 
@@ -586,7 +651,7 @@ export function initPlan() {
   renderShell();
   renderSavedJourneys();
 
-  // Update GTFS meta when graph loads
+  // Update GTFS meta when graph loads + render map background
   document.addEventListener('graph:ready', e => {
     const meta = e.detail;
     const synced = new Date(meta.synced);
@@ -596,6 +661,7 @@ export function initPlan() {
       : diffDays === 1 ? 'yesterday'
       : `${diffDays} days ago`;
     el('plan-gtfs-meta').textContent = `GTFS data · last synced ${label}`;
+    renderRouteMapBg();
   });
 
   document.addEventListener('graph:error', () => {
