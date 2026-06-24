@@ -1,7 +1,7 @@
 import { Timetable, Router, StopsIndex } from 'minotor';
 import { initPlan } from './plan.js';
 import { initDiscover } from './discover.js';
-import { initFares } from './fares.js';
+import { initFares, prefillRoute } from './fares.js';
 
 // ─── Graph state ───────────────────────────────────────────
 let _router = null;
@@ -68,6 +68,12 @@ function init() {
   // Restore tab from hash
   const hash = window.location.hash.replace('#', '');
   if (TABS.includes(hash)) activateTab(hash);
+
+  // Cross-view navigation
+  document.addEventListener('navigate:fares', e => {
+    activateTab('fares');
+    prefillRoute(e.detail.routeId, e.detail.routeName);
+  });
 
   // Offline indicator
   syncOnlineStatus();

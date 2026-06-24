@@ -81,36 +81,39 @@ function renderRoutesList(si) {
     return;
   }
 
-  // Derive routes from the graph — we enumerate known routes from stops
-  // by collecting serviceRoutes embedded in the timetable.
-  // Since StopsIndex doesn't expose routes, we use a heuristic via GTFS.
-  // For now we render a static representative list of key Nairobi routes.
-  // In production this would be derived from the parsed GTFS routes.txt data.
   const routes = getKnownRoutes();
 
   panel.innerHTML = routes.map(r => `
-    <div class="list-item" style="cursor:default">
+    <button class="list-item"
+      data-fares-id="${r.faresId}"
+      data-fares-name="${r.faresName.replace(/"/g, '&quot;')}">
       <div class="list-item__icon" style="background:${r.color}18;color:${r.color}">
         <svg><use href="#icon-bus"/></svg>
       </div>
       <div class="list-item__body">
         <div class="list-item__name">Route ${r.name}</div>
-        <div class="list-item__sub">${r.long}</div>
+        <div class="list-item__sub">${r.long} · ${r.sacco}</div>
       </div>
-      <div style="display:flex;gap:3px">
-        <span class="route-chip">${r.sacco}</span>
-      </div>
-    </div>
+      <div class="list-item__right"><svg><use href="#icon-chevron-right"/></svg></div>
+    </button>
   `).join('');
+
+  panel.querySelectorAll('.list-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('navigate:fares', {
+        detail: { routeId: btn.dataset.faresId, routeName: btn.dataset.faresName }
+      }));
+    });
+  });
 }
 
 function getKnownRoutes() {
   return [
-    { name: '104', long: 'City Cabanas – Kahawa Sukari', sacco: 'Githurai Matatu', color: '#FF5722' },
-    { name: '237', long: 'Githurai 44 – CBD', sacco: 'Umoinner', color: '#FFC400' },
-    { name: '58',  long: 'CBD – JKIA', sacco: 'Citi Hoppa', color: '#2EC4F0' },
-    { name: '33',  long: 'Westlands – CBD', sacco: 'Citi Hoppa', color: '#2EC4F0' },
-    { name: '45',  long: 'Githurai – Kasarani', sacco: 'Githurai Matatu', color: '#FF5722' },
+    { faresId: 'R30',  name: '30',  faresName: 'Route 30 — Odeon-Westlands-Kangemi-Uthiru',                    long: 'Odeon – Westlands – Kangemi – Uthiru',          sacco: 'Citi Hoppa',  color: '#2EC4F0' },
+    { faresId: 'R58',  name: '58',  faresName: 'Route 58 — Ambassadeur-Jogoo Road-Buruburu',                   long: 'Ambassadeur – Jogoo Road – Buruburu',            sacco: 'Citi Hoppa',  color: '#2EC4F0' },
+    { faresId: 'R237', name: '237', faresName: 'Route 237 — Munyu Road-Pangani-Roysambu-Githurai-KU-Ruiru-Juja-Thika', long: 'Githurai – KU – Ruiru – Juja – Thika',  sacco: 'Umoinner',    color: '#FFC400' },
+    { faresId: 'R125', name: '125', faresName: 'Route 125 — Railways-Langata Road-Bomas-Ongata Rongai',        long: 'Railways – Langata Road – Ongata Rongai',        sacco: 'South Rift',  color: '#FF5722' },
+    { faresId: 'R110', name: '110', faresName: 'Route 110 — Railways-Mombasa Road-Mlolongo-Kitengela',         long: 'Railways – Mombasa Road – Mlolongo – Kitengela', sacco: 'Kitengela',   color: '#FF5722' },
   ];
 }
 

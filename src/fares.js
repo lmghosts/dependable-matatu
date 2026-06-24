@@ -274,6 +274,21 @@ function showSuccess(fare, queued) {
   setTimeout(() => el('fares-success')?.remove(), 5000);
 }
 
+// ─── Route selection (module-level so prefillRoute can call it) ────
+function _applyRouteSelection(id, name) {
+  state.route = id;
+  const dropdown   = el('fares-route-dropdown');
+  const searchArea = el('fares-search-area');
+  const chip       = el('fares-route-chip');
+  const chipLabel  = el('fares-chip-label');
+  if (dropdown)   dropdown.hidden   = true;
+  if (searchArea) searchArea.hidden = true;
+  if (chipLabel)  chipLabel.textContent = name;
+  if (chip)       chip.hidden = false;
+  loadFareCard(id);
+  syncSubmitBtn();
+}
+
 // ─── Form ──────────────────────────────────────────────────
 function renderForm() {
   state.route = '';
@@ -344,13 +359,7 @@ function renderForm() {
   }
 
   function selectRoute(id, name) {
-    state.route = id;
-    dropdown.hidden = true;
-    el('fares-search-area').hidden = true;
-    el('fares-chip-label').textContent = name;
-    el('fares-route-chip').hidden = false;
-    loadFareCard(id);
-    syncSubmitBtn();
+    _applyRouteSelection(id, name);
   }
 
   function clearRoute() {
@@ -396,6 +405,12 @@ function renderShell() {
     <div id="fares-form-section" class="pb-safe"></div>
   `;
   renderForm();
+}
+
+// ─── Pre-fill from external navigation (e.g. Discover → Fares) ────
+export function prefillRoute(id, name) {
+  renderForm();
+  _applyRouteSelection(id, name);
 }
 
 // ─── Public init ───────────────────────────────────────────
