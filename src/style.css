@@ -381,7 +381,7 @@ svg { display: block; }
 }
 .results-header {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
 }
@@ -1071,6 +1071,84 @@ svg { display: block; }
   font-weight: 700;
 }
 .informal-notice__text { font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+
+/* ─── Saved journeys ─── */
+.saved-section {
+  padding: 14px 16px 0;
+}
+.saved-section__hd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+.saved-item {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+.saved-item__run {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: none;
+  border: none;
+  text-align: left;
+  min-width: 0;
+}
+.saved-item__run:hover, .saved-item__run:active { background: var(--surface-2); }
+.saved-item__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.saved-item__unsave {
+  background: none;
+  border: none;
+  border-left: 1px solid var(--border);
+  padding: 11px 14px;
+  display: flex;
+  align-items: center;
+  color: var(--accent-sun);
+  flex-shrink: 0;
+}
+.saved-item__unsave:hover, .saved-item__unsave:active { background: rgba(255,196,0,.08); }
+
+/* ─── Star / bookmark button in results header ─── */
+.star-btn {
+  background: none;
+  border: none;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  transition: color 150ms;
+  flex-shrink: 0;
+}
+.star-btn svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.star-btn:hover { color: var(--accent-sun); }
+.star-btn--saved { color: var(--accent-sun); }
+.star-btn--saved svg { fill: var(--accent-sun); stroke: var(--accent-sun); }
 
 /* ─── Utility ─── */
 .pb-safe { padding-bottom: calc(100px + var(--safe-bottom)); }

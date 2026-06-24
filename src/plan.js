@@ -1,5 +1,13 @@
 import { Query, Time } from 'minotor';
 import { getRouter, getStopsIndex } from './app.js';
+import { saveJourney, removeJourney, listJourneys, isJourneySaved } from './journeys.js';
+
+function esc(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escAttr(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+}
 
 // ─── Route stops (lazy-loaded) ─────────────────────────────
 let _routeStops = null;
@@ -151,6 +159,64 @@ function selectStop(stop, name) {
 
 function syncFindBtn() {
   el('plan-find-btn').disabled = !state.from || !state.to;
+}
+
+// ─── Saved journeys list ───────────────────────────────────
+async function renderSavedJourneys() {
+  const section = el('plan-saved');
+  if (!section) return;
+  const journeys = await listJourneys();
+  if (!journeys.length) {
+    section.hidden = true;
+    return;
+  }
+  const bookmarkSvg = `<svg viewBox="0 0 24 24" style="width:14px;height:14px;fill:currentColor"><path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>`;
+  section.hidden = false;
+  section.innerHTML = `
+    <div class="saved-section__hd">${bookmarkSvg} Saved</div>
+    ${journeys.slice(0, 5).map(j => `
+      <div class="saved-item">
+        <button class="saved-item__run"
+          data-from-id="${escAttr(j.fromId)}" data-from-name="${escAttr(j.fromName)}"
+          data-to-id="${escAttr(j.toId)}"   data-to-name="${escAttr(j.toName)}">
+          <span class="saved-item__label">${esc(j.fromName)} → ${esc(j.toName)}</span>
+        </button>
+        <button class="saved-item__unsave"
+          data-from-id="${escAttr(j.fromId)}" data-to-id="${escAttr(j.toId)}"
+          aria-label="Remove saved journey">
+          ${bookmarkSvg}
+        </button>
+      </div>
+    `).join('')}
+  `;
+
+  section.querySelectorAll('.saved-item__run').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const { fromId, fromName, toId, toName } = btn.dataset;
+      state.from = { stop: { sourceStopId: fromId }, name: fromName };
+      state.to   = { stop: { sourceStopId: toId },   name: toName };
+      el('plan-from-text').textContent = fromName;
+      el('plan-from-text').classList.add('filled');
+      el('plan-to-text').textContent = toName;
+      el('plan-to-text').classList.add('filled');
+      syncFindBtn();
+      findRoute();
+    });
+  });
+
+  section.querySelectorAll('.saved-item__unsave').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { fromId, toId } = btn.dataset;
+      await removeJourney(fromId, toId);
+      renderSavedJourneys();
+      const starBtn = el('plan-star-btn');
+      if (starBtn &&
+          state.from?.stop.sourceStopId === fromId &&
+          state.to?.stop.sourceStopId   === toId) {
+        starBtn.classList.remove('star-btn--saved');
+      }
+    });
+  });
 }
 
 // ─── Swap ──────────────────────────────────────────────────
@@ -348,10 +414,10 @@ function closeLegDetail() {
 }
 
 // ─── State machine ─────────────────────────────────────────
-function setResultState(state, message) {
+function setResultState(mode, message) {
   const resultsEl = el('plan-results');
 
-  switch (state) {
+  switch (mode) {
     case 'hidden':
       resultsEl.hidden = true;
       break;
@@ -380,16 +446,39 @@ function setResultState(state, message) {
         </div>`;
       break;
 
-    case 'results':
+    case 'results': {
+      const fromId = state.from.stop.sourceStopId;
+      const toId   = state.to.stop.sourceStopId;
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
           <div class="results-header">
             <span class="results-title">Best route</span>
+            <button class="star-btn" id="plan-star-btn" aria-label="Save journey">
+              <svg viewBox="0 0 24 24" style="width:18px;height:18px">
+                <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+              </svg>
+            </button>
           </div>
           <div id="plan-results-list"></div>
         </div>`;
+      isJourneySaved(fromId, toId).then(saved => {
+        el('plan-star-btn')?.classList.toggle('star-btn--saved', saved);
+      });
+      el('plan-star-btn').addEventListener('click', async () => {
+        const btn   = el('plan-star-btn');
+        const saved = btn.classList.contains('star-btn--saved');
+        if (saved) {
+          await removeJourney(fromId, toId);
+          btn.classList.remove('star-btn--saved');
+        } else {
+          await saveJourney(fromId, state.from.name, toId, state.to.name);
+          btn.classList.add('star-btn--saved');
+        }
+        renderSavedJourneys();
+      });
       break;
+    }
 
     case 'no-route':
       resultsEl.hidden = false;
@@ -449,6 +538,9 @@ function renderShell() {
       </button>
     </div>
 
+    <!-- Saved journeys -->
+    <div id="plan-saved" class="saved-section" hidden></div>
+
     <!-- Results container -->
     <div id="plan-results" hidden></div>
 
@@ -492,6 +584,7 @@ function renderShell() {
 // ─── Public init ───────────────────────────────────────────
 export function initPlan() {
   renderShell();
+  renderSavedJourneys();
 
   // Update GTFS meta when graph loads
   document.addEventListener('graph:ready', e => {
