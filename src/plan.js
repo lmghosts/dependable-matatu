@@ -1,6 +1,7 @@
 import { Query, Time } from 'minotor';
 import { getRouter, getStopsIndex } from './app.js';
 import { saveJourney, removeJourney, listJourneys, isJourneySaved } from './journeys.js';
+import { fetchAggregates } from './lib/supabase.js';
 
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -278,12 +279,15 @@ function renderRoute(route, requestedTime) {
 
   const legsHtml = legs.map((leg, i) => {
     if ('departureTime' in leg) {
-      const legDur = fmtDuration(leg.arrivalTime.diff(leg.departureTime));
+      const legDur  = fmtDuration(leg.arrivalTime.diff(leg.departureTime));
+      const fareId  = `plan-fare-${leg.route.name.replace(/[^a-z0-9]/gi, '-')}`;
       return `
         <button class="leg-row leg-row--tappable" data-leg="${i}" aria-label="See stops for Route ${leg.route.name}">
           <span class="leg-badge leg-badge--bus">${leg.route.name}</span>
-          <span class="leg-stop"><strong>${leg.from.name}</strong> → ${leg.to.name}</span>
-          <span class="leg-meta">${fmt(leg.departureTime)} · ${legDur}</span>
+          <div class="leg-body">
+            <span class="leg-stop"><strong>${leg.from.name}</strong> → ${leg.to.name}</span>
+            <span class="leg-meta">${fmt(leg.departureTime)} · ${legDur}<span class="leg-fare" id="${fareId}"></span></span>
+          </div>
           <svg class="leg-chevron" style="width:14px;height:14px;flex-shrink:0;color:var(--text-secondary)"><use href="#icon-chevron-right"/></svg>
         </button>`;
     }
@@ -321,6 +325,27 @@ function renderRoute(route, requestedTime) {
       showLegDetail(legs[idx]);
     });
   });
+
+  enrichLegFares(legs);
+}
+
+// ─── P50 fare enrichment ───────────────────────────────────
+async function enrichLegFares(legs) {
+  const seen = new Set();
+  for (const leg of legs) {
+    if (!('departureTime' in leg)) continue;
+    const routeId = `R${leg.route.name}`;
+    if (seen.has(routeId)) continue;
+    seen.add(routeId);
+    try {
+      const aggs = await fetchAggregates(routeId);
+      if (!aggs.length) continue;
+      const minP50 = Math.min(...aggs.map(a => a.p50_kes));
+      const fareId = `plan-fare-${leg.route.name.replace(/[^a-z0-9]/gi, '-')}`;
+      const fareEl = document.getElementById(fareId);
+      if (fareEl) fareEl.textContent = `from ~KSh ${minP50}`;
+    } catch { /* offline or no data — silent */ }
+  }
 }
 
 // ─── Leg detail sheet ──────────────────────────────────────
