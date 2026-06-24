@@ -65,9 +65,14 @@ function init() {
     document.getElementById(`tab-${name}`).addEventListener('click', () => activateTab(name));
   });
 
-  // Restore tab from hash
+  // Restore tab from hash on load, and track back/forward navigation
   const hash = window.location.hash.replace('#', '');
   if (TABS.includes(hash)) activateTab(hash);
+
+  window.addEventListener('hashchange', () => {
+    const h = window.location.hash.replace('#', '');
+    activateTab(TABS.includes(h) ? h : 'plan');
+  });
 
   // Cross-view navigation
   document.addEventListener('navigate:fares', e => {
