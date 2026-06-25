@@ -177,7 +177,7 @@ svg { display: block; }
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -.03em;
-  color: var(--text-primary);
+  color: var(--accent-flame);
 }
 .app-name em {
   font-style: normal;

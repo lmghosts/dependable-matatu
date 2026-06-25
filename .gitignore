@@ -7,6 +7,7 @@ pipeline/*.zip
 .gstack/
 .env.local
 .env.*.local
+.env.production
 
 # Capacitor — local machine paths and secrets
 android/local.properties
