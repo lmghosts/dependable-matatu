@@ -3,8 +3,23 @@ import { getStopsIndex, getRouter } from './app.js';
 // ─── State ─────────────────────────────────────────────────
 let activeTab = 'stops';
 let detailView = null;  // { type: 'stop'|'sacco', data }
+let _routeHours = null;
 
 const el = id => document.getElementById(id);
+
+// ─── Operating hours ───────────────────────────────────────
+async function loadRouteHours() {
+  try {
+    const res = await fetch('/route-hours.json');
+    _routeHours = await res.json();
+  } catch {
+    _routeHours = {};
+  }
+}
+
+function getRouteHours(routeId) {
+  return _routeHours?.[routeId] ?? { opens: '05:00', closes: '23:00', validated: false };
+}
 
 // ─── Tab management ────────────────────────────────────────
 function setTab(name) {
@@ -99,11 +114,8 @@ function renderRoutesList(si) {
   `).join('');
 
   panel.querySelectorAll('.list-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.dispatchEvent(new CustomEvent('navigate:fares', {
-        detail: { routeId: btn.dataset.faresId, routeName: btn.dataset.faresName }
-      }));
-    });
+    const route = routes.find(r => r.faresId === btn.dataset.faresId);
+    btn.addEventListener('click', () => showRouteDetail(route));
   });
 }
 
@@ -226,7 +238,7 @@ function showSaccoDetail(sacco) {
     <div class="premise3-notice">
       <div class="premise3-notice__icon"><svg><use href="#icon-info"/></svg></div>
       <div>
-        Ratings and reliability scores are not shown. Dependable Matatu surfaces
+        Ratings and reliability scores are not shown. Matwana surfaces
         crowd-sourced fare data only — operator quality comparisons are not part of v1.
       </div>
     </div>
@@ -252,6 +264,54 @@ function showSaccoDetail(sacco) {
   el('disc-back')?.addEventListener('click', hideDetail);
 }
 
+// ─── Route detail ──────────────────────────────────────────
+function showRouteDetail(route) {
+  const view = el('disc-detail');
+  const hours = getRouteHours(route.faresId);
+
+  view.innerHTML = `
+    <div class="detail-header">
+      <button class="back-btn" id="disc-back"><svg><use href="#icon-chevron-left"/></svg></button>
+      <h2 class="detail-title">Route ${route.name}</h2>
+    </div>
+
+    <div style="padding:16px">
+      <div class="card" style="padding:16px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Route</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">${route.long}</div>
+        <div style="font-size:13px;color:var(--text-secondary)">${route.sacco}</div>
+      </div>
+
+      <div class="card" style="padding:16px;margin-bottom:16px">
+        <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px">Operating Hours</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:${hours.validated ? 0 : 10}px">
+          <svg style="width:16px;height:16px;flex-shrink:0;color:var(--accent-sky)"><use href="#icon-clock"/></svg>
+          <span style="font-size:16px;font-weight:600">${hours.opens} – ${hours.closes}</span>
+        </div>
+        ${!hours.validated ? `
+        <div style="font-size:12px;color:var(--text-secondary);display:flex;align-items:flex-start;gap:6px">
+          <svg style="width:13px;height:13px;flex-shrink:0;margin-top:1px;color:var(--accent-sun)"><use href="#icon-warning"/></svg>
+          <span>Not yet validated by commuters — times may vary</span>
+        </div>` : ''}
+      </div>
+
+      <button id="disc-route-fares-btn"
+        style="width:100%;padding:14px;background:var(--accent-flame);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:pointer">
+        View fares for this route
+      </button>
+    </div>
+  `;
+
+  view.hidden = false;
+  el('disc-back')?.addEventListener('click', hideDetail);
+  el('disc-route-fares-btn')?.addEventListener('click', () => {
+    hideDetail();
+    document.dispatchEvent(new CustomEvent('navigate:fares', {
+      detail: { routeId: route.faresId, routeName: route.faresName }
+    }));
+  });
+}
+
 function hideDetail() {
   el('disc-detail').hidden = true;
 }
@@ -266,7 +326,7 @@ function onSearch(query) {
 function renderShell() {
   el('view-discover').innerHTML = `
     <div class="view-header">
-      <span class="app-name">Dependable <em>Matatu</em></span>
+      <span class="app-name">Matwana</span>
     </div>
 
     <!-- Tabs -->
@@ -315,6 +375,7 @@ function renderShell() {
 // ─── Public init ───────────────────────────────────────────
 export function initDiscover() {
   renderShell();
+  loadRouteHours();
 
   document.addEventListener('graph:ready', () => {
     const si = getStopsIndex();

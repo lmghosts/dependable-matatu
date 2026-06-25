@@ -8,8 +8,8 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.js',
       manifest: {
-        name: 'Dependable Matatu',
-        short_name: 'Matatu',
+        name: 'Matwana',
+        short_name: 'Matwana',
         description: 'Plan your Nairobi matatu journey — offline-first',
         theme_color: '#0E0F12',
         background_color: '#0E0F12',

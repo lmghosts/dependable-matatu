@@ -400,7 +400,7 @@ function renderForm() {
 function renderShell() {
   el('view-fares').innerHTML = `
     <div class="view-header">
-      <span class="app-name">Dependable <em>Matatu</em></span>
+      <span class="app-name">Matwana</span>
     </div>
     <div id="fares-form-section" class="pb-safe"></div>
   `;

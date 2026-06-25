@@ -599,7 +599,7 @@ function renderShell() {
   el('view-plan').innerHTML = `
     <!-- App header -->
     <div class="view-header">
-      <span class="app-name">Dependable <em>Matatu</em></span>
+      <span class="app-name">Matwana</span>
       <span class="gtfs-meta" id="plan-gtfs-meta">GTFS data · loading…</span>
     </div>
 

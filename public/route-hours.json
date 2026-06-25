@@ -1,0 +1,7 @@
+{
+  "R30":  { "opens": "05:00", "closes": "23:00", "validated": false },
+  "R58":  { "opens": "05:00", "closes": "23:00", "validated": false },
+  "R237": { "opens": "05:00", "closes": "23:00", "validated": false },
+  "R125": { "opens": "05:00", "closes": "23:00", "validated": false },
+  "R110": { "opens": "05:00", "closes": "23:00", "validated": false }
+}
