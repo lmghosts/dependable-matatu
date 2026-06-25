@@ -163,13 +163,17 @@ function renderFareCardLoading() {
 
 function renderFareCardEmpty() {
   return `
-    <div class="empty-state" style="padding:20px 16px">
-      <div class="empty-state__icon"><svg><use href="#icon-info"/></svg></div>
-      <div class="empty-state__title">No reports yet</div>
-      <p class="empty-state__sub">
-        Be the first to report a fare on this route!
-        Minimum 3 reports needed before a P50 fare is shown.
+    <div style="background:var(--surface);border-radius:12px;padding:16px;margin:12px 0">
+      <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px">
+        No fare reports yet for this route
+      </div>
+      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
+        Pay what you're charged and report it here — your data helps the next rider.
       </p>
+      <button id="fares-cold-cta"
+        style="width:100%;padding:12px;background:var(--accent-flame);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">
+        Report the fare you paid
+      </button>
     </div>`;
 }
 
@@ -200,6 +204,16 @@ function renderFareCardData(aggregates) {
     </div>`;
 }
 
+function wireColdCta() {
+  el('fares-cold-cta')?.addEventListener('click', () => {
+    const fromInput = el('fares-from');
+    if (fromInput) {
+      fromInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      fromInput.focus({ preventScroll: true });
+    }
+  });
+}
+
 async function loadFareCard(routeId) {
   const card = el('fares-fare-card');
   if (!card) return;
@@ -208,9 +222,15 @@ async function loadFareCard(routeId) {
 
   try {
     const aggs = await fetchAggregates(routeId);
-    if (card.parentElement) card.innerHTML = renderFareCardData(aggs);
+    if (card.parentElement) {
+      card.innerHTML = renderFareCardData(aggs);
+      if (!aggs.length) wireColdCta();
+    }
   } catch {
-    if (card.parentElement) card.innerHTML = renderFareCardEmpty();
+    if (card.parentElement) {
+      card.innerHTML = renderFareCardEmpty();
+      wireColdCta();
+    }
   }
 }
 
