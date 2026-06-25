@@ -7,3 +7,10 @@ pipeline/*.zip
 .gstack/
 .env.local
 .env.*.local
+
+# Capacitor — local machine paths and secrets
+android/local.properties
+*.keystore
+*.jks
+ios/App/Pods/
+ios/.xcode.env.local

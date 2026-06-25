@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Matwana</string>
+    <string name="title_activity_main">Matwana</string>
+    <string name="package_name">com.matwana.app</string>
+    <string name="custom_url_scheme">com.matwana.app</string>
+</resources>
