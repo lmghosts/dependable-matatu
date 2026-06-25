@@ -1,7 +1,9 @@
 import { Query, Time } from 'minotor';
 import { getRouter, getStopsIndex } from './app.js';
 import { saveJourney, removeJourney, listJourneys, isJourneySaved } from './journeys.js';
-import { fetchAggregates } from './lib/supabase.js';
+import { fetchAggregates, submitReport } from './lib/supabase.js';
+import { enqueue } from './lib/offline-queue.js';
+import { getDeviceId } from './lib/device-id.js';
 
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -32,6 +34,12 @@ const state = {
 
 // ─── DOM helpers ───────────────────────────────────────────
 const el = id => document.getElementById(id);
+
+// Initialise device ID once — used for deviation reports
+let _deviceId = null;
+getDeviceId().then(id => { _deviceId = id; }).catch(() => {});
+
+let _devSubtype = null;
 
 function fmt(time) {
   return time.toString().substring(0, 5);  // "HH:MM"
@@ -314,6 +322,13 @@ function renderRoute(route, requestedTime) {
         <svg style="width:12px;height:12px;vertical-align:middle;margin-right:4px"><use href="#icon-transfer"/></svg>
         ${transfers} transfer${transfers > 1 ? 's' : ''}
       </div>` : ''}
+      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--surface-2)">
+        <button id="plan-report-btn"
+          style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:2px 0">
+          <svg style="width:13px;height:13px;flex-shrink:0"><use href="#icon-warning"/></svg>
+          Report a problem with this route
+        </button>
+      </div>
     </div>
     <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin:8px 0 0">Tap a route leg to see stops</p>
   `;
@@ -324,6 +339,14 @@ function renderRoute(route, requestedTime) {
       const idx = Number(btn.dataset.leg);
       showLegDetail(legs[idx]);
     });
+  });
+
+  // Wire report button — uses first vehicle leg as the reported route
+  const primaryLeg = vehicleLegs[0];
+  el('plan-report-btn')?.addEventListener('click', () => {
+    const rId      = `R${primaryLeg.route.name}`;
+    const rDisplay = `Route ${primaryLeg.route.name} — ${primaryLeg.from.name} to ${primaryLeg.to.name}`;
+    showDeviationSheet(rId, rDisplay);
   });
 
   enrichLegFares(legs);
@@ -594,6 +617,118 @@ function setResultState(mode, message) {
   }
 }
 
+// ─── Deviation reporting ───────────────────────────────────
+function showDeviationSheet(routeId, routeDisplay) {
+  _devSubtype = null;
+  const sheet = el('plan-deviation-sheet');
+
+  sheet.innerHTML = `
+    <div class="detail-sheet__handle"></div>
+    <div class="detail-sheet__header">
+      <button class="detail-sheet__close" id="plan-dev-close" aria-label="Close">
+        <svg style="width:20px;height:20px"><use href="#icon-x"/></svg>
+      </button>
+      <div>
+        <div class="detail-sheet__title">Report a problem</div>
+        <div class="detail-sheet__sub">${esc(routeDisplay)}</div>
+      </div>
+    </div>
+    <div style="padding:16px 16px 32px">
+      <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">What happened?</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px" id="plan-dev-options">
+        ${[
+          ['terminated_early', 'Matatu terminated early'],
+          ['route_changed',    'Route changed'],
+          ['other',            'Other'],
+        ].map(([val, label]) => `
+          <button class="dev-option" data-val="${val}"
+            style="padding:12px 14px;border-radius:10px;border:1.5px solid var(--surface-2);background:var(--surface);color:var(--text-primary);font-size:14px;font-weight:500;cursor:pointer;text-align:left;transition:border-color .15s,background .15s">
+            ${label}
+          </button>
+        `).join('')}
+      </div>
+      <div style="font-size:11px;font-weight:600;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">Note (optional)</div>
+      <textarea id="plan-dev-note" maxlength="140" placeholder="Any details? (140 chars max)"
+        style="width:100%;box-sizing:border-box;background:var(--surface);border:1.5px solid var(--surface-2);border-radius:10px;padding:10px 12px;color:var(--text-primary);font-size:14px;font-family:inherit;resize:none;height:76px;outline:none;margin-bottom:4px"></textarea>
+      <div id="plan-dev-chars" style="font-size:11px;color:var(--text-secondary);text-align:right;margin-bottom:16px">0 / 140</div>
+      <button id="plan-dev-submit" disabled
+        style="width:100%;padding:14px;background:var(--accent-flame);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:600;cursor:default;opacity:.4;transition:opacity .15s">
+        Submit report
+      </button>
+    </div>
+  `;
+
+  sheet.hidden = false;
+  sheet.classList.add('detail-sheet--open');
+
+  function syncDevSubmit() {
+    const btn = el('plan-dev-submit');
+    if (!btn) return;
+    btn.disabled = !_devSubtype;
+    btn.style.opacity = _devSubtype ? '1' : '.4';
+    btn.style.cursor  = _devSubtype ? 'pointer' : 'default';
+  }
+
+  sheet.querySelectorAll('.dev-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      sheet.querySelectorAll('.dev-option').forEach(b => {
+        b.style.borderColor = 'var(--surface-2)';
+        b.style.background  = 'var(--surface)';
+      });
+      btn.style.borderColor = 'var(--accent-flame)';
+      btn.style.background  = 'rgba(255,87,34,.08)';
+      _devSubtype = btn.dataset.val;
+      syncDevSubmit();
+    });
+  });
+
+  el('plan-dev-note').addEventListener('input', e => {
+    el('plan-dev-chars').textContent = `${e.target.value.length} / 140`;
+  });
+
+  el('plan-dev-close').addEventListener('click', closeDeviationSheet);
+  el('plan-dev-submit').addEventListener('click', () => handleDeviationSubmit(routeId));
+}
+
+function closeDeviationSheet() {
+  const sheet = el('plan-deviation-sheet');
+  sheet.classList.remove('detail-sheet--open');
+  setTimeout(() => { sheet.hidden = true; }, 260);
+}
+
+async function handleDeviationSubmit(routeId) {
+  const note    = el('plan-dev-note')?.value.trim() || undefined;
+  const payload = {
+    type:      'deviation',
+    device_id: _deviceId ?? undefined,
+    route_id:  routeId,
+    subtype:   _devSubtype,
+    note,
+  };
+
+  closeDeviationSheet();
+
+  try {
+    if (navigator.onLine) {
+      await submitReport(payload);
+    } else {
+      await enqueue(payload);
+    }
+  } catch {
+    await enqueue(payload).catch(() => {});
+  }
+
+  showPlanToast('Reported — thank you');
+}
+
+function showPlanToast(msg) {
+  const toast = el('plan-toast');
+  if (!toast) return;
+  toast.textContent = msg;
+  toast.hidden = false;
+  setTimeout(() => { toast.hidden = true; }, 2000);
+}
+
 // ─── Render shell ──────────────────────────────────────────
 function renderShell() {
   el('view-plan').innerHTML = `
@@ -636,6 +771,14 @@ function renderShell() {
 
     <!-- Leg detail sheet -->
     <div class="detail-sheet" id="plan-leg-detail" hidden></div>
+
+    <!-- Deviation report sheet -->
+    <div class="detail-sheet" id="plan-deviation-sheet" hidden></div>
+
+    <!-- Toast -->
+    <div id="plan-toast" hidden
+      style="position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface-2);color:var(--text-primary);padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;white-space:nowrap;border:1px solid rgba(255,255,255,.08)">
+    </div>
 
     <!-- Autocomplete overlay -->
     <div class="autocomplete-overlay" id="plan-autocomplete" hidden>
