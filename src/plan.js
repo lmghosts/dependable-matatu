@@ -104,20 +104,52 @@ function rankStops(stops) {
   );
 }
 
-// Group stops by display name. Each group carries ALL matching stop IDs so
-// the routing engine can try every combination and pick the best result.
-// This lets users type "Westlands" and get one result — the app figures out
-// which physical stage to use based on their origin/destination.
-function groupStopsByName(stops) {
-  const groups = new Map();
+// Haversine distance in metres between two {lat,lon} points.
+function _haversineM(a, b) {
+  const R = 6371000;
+  const dLat = (b.lat - a.lat) * Math.PI / 180;
+  const dLon = (b.lon - a.lon) * Math.PI / 180;
+  const s = Math.sin(dLat / 2) ** 2 +
+            Math.cos(a.lat * Math.PI / 180) * Math.cos(b.lat * Math.PI / 180) *
+            Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(s), Math.sqrt(1 - s));
+}
+
+// Group stops by name AND geographic proximity (≤500m centroid distance).
+// Stops with the same name but >500m apart (e.g. "Shell" on Thika Rd vs
+// Mombasa Rd) stay as separate autocomplete entries. Stops within 500m are
+// merged — the routing engine tries all of them and picks the best route.
+// Uses centroid-based proximity to prevent chaining (greedy nearest-neighbour
+// can link A→B→C even when A and C are >1km apart).
+function groupStopsByName(stops, maxMetres = 500) {
+  const groups = [];
   for (const s of stops) {
     const name = s.name.trim();
-    if (!groups.has(name)) groups.set(name, { name, stops: [], bestCount: 0 });
-    const g = groups.get(name);
-    g.stops.push(s);
-    g.bestCount = Math.max(g.bestCount, _routableStops?.[s.sourceStopId] ?? 0);
+    const hasCoords = s.lat && s.lon;
+    let placed = false;
+    for (const g of groups) {
+      if (g.name !== name) continue;
+      if (!hasCoords) { // no coords → group by name only
+        g.stops.push(s);
+        g.bestCount = Math.max(g.bestCount, _routableStops?.[s.sourceStopId] ?? 0);
+        placed = true;
+        break;
+      }
+      // Centroid check: compare new stop to the geometric centre of the group.
+      const cLat = g.stops.reduce((sum, m) => sum + (m.lat || 0), 0) / g.stops.length;
+      const cLon = g.stops.reduce((sum, m) => sum + (m.lon || 0), 0) / g.stops.length;
+      if (_haversineM({ lat: cLat, lon: cLon }, s) <= maxMetres) {
+        g.stops.push(s);
+        g.bestCount = Math.max(g.bestCount, _routableStops?.[s.sourceStopId] ?? 0);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      groups.push({ name, stops: [s], bestCount: _routableStops?.[s.sourceStopId] ?? 0 });
+    }
   }
-  return [...groups.values()].sort((a, b) => b.bestCount - a.bestCount);
+  return groups.sort((a, b) => b.bestCount - a.bestCount);
 }
 
 // ─── State ─────────────────────────────────────────────────
