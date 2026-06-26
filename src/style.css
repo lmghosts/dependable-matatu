@@ -122,18 +122,19 @@ svg { display: block; }
   overflow: hidden;
 }
 
-/* ─── Leaflet map container ─── */
+/* ─── SVG transit map container ─── */
 .plan-map-container {
   position: absolute;
   inset: 0;
   z-index: 1;
+  background: #0E0F12;
+  overflow: hidden;
 }
-/* Schematic SVG fallback — fades out once real tiles load */
+/* Old schematic placeholder (kept for the tiny window before graph loads) */
 .plan-map-schematic {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  transition: opacity .6s ease;
   overflow: hidden;
 }
 .route-map-svg {
