@@ -190,16 +190,18 @@ export async function initTransitMap(container, si, routeStops, routableStops) {
   // which would otherwise make only the top-left corner visible.
   svg.setAttribute('width', '100%');
   svg.setAttribute('height', '100%');
+  // slice fills the portrait container on mobile; meet leaves blank space below.
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
 
   // Initial view: centred on CBD area of the designer's SVG (4147×2764 canvas).
-  // CBD (36.82°E, 1.286°S) sits in the right portion of this canvas (~x=3100, y=1700).
+  // CBD (36.82°E, 1.286°S) sits in the right portion of this canvas (~x=3562, y=2179).
   // Stop markers and terminal labels are embedded in the SVG — no JS overlay needed.
   const CBD_X = 3562, CBD_Y = 2179;
   const initW = PW * 0.32;
   const initH = initW * (PH / PW);
   const initVB = {
-    x: CBD_X - initW * 0.42,
-    y: CBD_Y - initH * 0.48,
+    x: CBD_X - initW * 0.5,
+    y: CBD_Y - initH * 0.5,
     w: initW, h: initH,
   };
 
