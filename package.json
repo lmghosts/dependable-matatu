@@ -16,6 +16,7 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
+    "leaflet": "^1.9.4",
     "minotor": "^3.0.1"
   },
   "devDependencies": {

@@ -4,6 +4,8 @@ import { saveJourney, removeJourney, listJourneys, isJourneySaved } from './jour
 import { fetchAggregates, submitReport } from './lib/supabase.js';
 import { enqueue } from './lib/offline-queue.js';
 import { getDeviceId } from './lib/device-id.js';
+import { initTransitMap } from './transit-map.js';
+import { renderStepLine, wireStepNavButtons } from './step-line.js';
 
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -322,40 +324,17 @@ function navigateToStage(stop) {
   }, 500);
 }
 
-function renderRoute(route, requestedTime) {
-  const legs = route.legs;
-  const dep = fmt(route.departureTime());
-  const arr = fmt(route.arrivalTime());
-  const dur = fmtDuration(route.totalDuration());
-
+async function renderRoute(route, requestedTime) {
+  const legs        = route.legs;
+  const dep         = fmt(route.departureTime());
+  const arr         = fmt(route.arrivalTime());
+  const dur         = fmtDuration(route.totalDuration());
   const vehicleLegs = legs.filter(l => 'departureTime' in l);
-  const transfers = vehicleLegs.length - 1;
+  const transfers   = vehicleLegs.length - 1;
+  const si          = getStopsIndex();
+  const routeStops  = await getRouteStops();
 
-  const legsHtml = legs.map((leg, i) => {
-    if ('departureTime' in leg) {
-      const legDur  = fmtDuration(leg.arrivalTime.diff(leg.departureTime));
-      const fareId  = `plan-fare-${leg.route.name.replace(/[^a-z0-9]/gi, '-')}`;
-      return `
-        <button class="leg-row leg-row--tappable" data-leg="${i}" aria-label="See stops for Route ${leg.route.name}">
-          <span class="leg-badge leg-badge--bus">${leg.route.name}</span>
-          <div class="leg-body">
-            <span class="leg-stop"><strong>${leg.from.name}</strong> → ${leg.to.name}</span>
-            <span class="leg-meta">${fmt(leg.departureTime)} · ${legDur}<span class="leg-fare" id="${fareId}"></span></span>
-          </div>
-          <svg class="leg-chevron" style="width:14px;height:14px;flex-shrink:0;color:var(--text-secondary)"><use href="#icon-chevron-right"/></svg>
-        </button>`;
-    }
-    return `
-      <div class="leg-row">
-        <span class="leg-badge">Walk</span>
-        <span class="leg-stop">${leg.from.name} → ${leg.to.name}</span>
-      </div>`;
-  }).join('');
-
-  // Boarding stop — first vehicle leg's from stop
-  const boardingStop = vehicleLegs[0]?.from;
-  const boardingCoords = boardingStop ? getStopsIndex()?.findStopBySourceStopId(boardingStop.sourceStopId) : null;
-  const hasCoords = !!(boardingCoords?.lat && boardingCoords?.lon);
+  const stepLineHtml = renderStepLine(legs, routeStops, si);
 
   el('plan-results-list').innerHTML = `
     <div class="route-card">
@@ -366,22 +345,11 @@ function renderRoute(route, requestedTime) {
         <span class="route-duration">
           <svg style="width:12px;height:12px;vertical-align:middle;margin-right:3px"><use href="#icon-clock"/></svg>
           ${dur}
+          ${transfers > 0 ? `<span style="margin-left:6px;opacity:.7">· ${transfers} transfer${transfers > 1 ? 's' : ''}</span>` : ''}
         </span>
       </div>
-
-      ${hasCoords ? `
-      <button id="plan-nav-stage-btn"
-        style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 0;margin:8px 0 4px;background:none;border:none;border-top:1px solid var(--surface-2);color:var(--accent-sky);font-size:13px;font-weight:600;cursor:pointer;text-align:left">
-        <svg style="width:16px;height:16px;flex-shrink:0"><use href="#icon-pin"/></svg>
-        Navigate to ${esc(boardingStop.name)}
-      </button>` : ''}
-
-      <div class="route-legs">${legsHtml}</div>
-      ${transfers > 0 ? `<div style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
-        <svg style="width:12px;height:12px;vertical-align:middle;margin-right:4px"><use href="#icon-transfer"/></svg>
-        ${transfers} transfer${transfers > 1 ? 's' : ''}
-      </div>` : ''}
-      <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--surface-2)">
+      ${stepLineHtml}
+      <div style="padding-top:10px;border-top:1px solid var(--surface-2)">
         <button id="plan-report-btn"
           style="display:flex;align-items:center;gap:6px;background:none;border:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:2px 0">
           <svg style="width:13px;height:13px;flex-shrink:0"><use href="#icon-warning"/></svg>
@@ -389,30 +357,24 @@ function renderRoute(route, requestedTime) {
         </button>
       </div>
     </div>
-    <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin:8px 0 0">Tap a route leg to see stops</p>
+    <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin:8px 0 0">Tap a leg to see all stops</p>
   `;
 
-  // Wire leg taps
+  // Wire step-line navigate buttons (from step-line.js)
+  wireStepNavButtons(el('plan-results-list'));
+
+  // Wire leg taps (still supported via data-leg on step nodes if needed)
   el('plan-results-list').querySelectorAll('[data-leg]').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = Number(btn.dataset.leg);
-      showLegDetail(legs[idx]);
-    });
+    btn.addEventListener('click', () => showLegDetail(legs[Number(btn.dataset.leg)]));
   });
 
-  // Wire navigate-to-stage button
-  if (hasCoords) {
-    el('plan-nav-stage-btn')?.addEventListener('click', () => {
-      navigateToStage(boardingCoords);
-    });
-  }
-
-  // Wire report button — uses first vehicle leg as the reported route
+  // Wire report button
   const primaryLeg = vehicleLegs[0];
   el('plan-report-btn')?.addEventListener('click', () => {
-    const rId      = `R${primaryLeg.route.name}`;
-    const rDisplay = `Route ${primaryLeg.route.name} — ${primaryLeg.from.name} to ${primaryLeg.to.name}`;
-    showDeviationSheet(rId, rDisplay);
+    showDeviationSheet(
+      `R${primaryLeg.route.name}`,
+      `Route ${primaryLeg.route.name} — ${primaryLeg.from.name} to ${primaryLeg.to.name}`
+    );
   });
 
   enrichLegFares(legs);
@@ -527,9 +489,26 @@ function closeLegDetail() {
   setTimeout(() => { sheet.hidden = true; }, 260);
 }
 
-// ─── Route map background (empty-state decoration) ─────────
-// Schematic transit map — 90°/45° angles only, modelled on the Digital Matatus
-// Nairobi route map. Five major corridors radiating from the CBD hub.
+// ─── Drawer state machine ──────────────────────────────────
+// States: idle | open | results
+let _drawerState = 'idle';
+
+function setDrawerState(state) {
+  _drawerState = state;
+  const drawer = el('plan-bottom-drawer');
+  if (!drawer) return;
+  drawer.className = `plan-drawer plan-drawer--${state}`;
+
+  const pill    = el('plan-drawer-pill');
+  const content = el('plan-drawer-content');
+  if (pill)    pill.hidden    = (state !== 'idle');
+  if (content) content.hidden = (state === 'idle');
+}
+
+function openDrawer() { setDrawerState('open'); }
+function closeDrawer() { setDrawerState('idle'); }
+
+// ─── Route map (static schematic fallback) ─────────────────
 function renderRouteMapBg() {
   const mapDiv = el('plan-map-bg');
   if (!mapDiv) return;
@@ -694,15 +673,15 @@ function renderRouteMapBg() {
 // ─── State machine ─────────────────────────────────────────
 function setResultState(mode, message) {
   const resultsEl = el('plan-results');
-  const mapEl = el('plan-map-bg');
-  if (mapEl) mapEl.hidden = (mode !== 'hidden');
 
   switch (mode) {
     case 'hidden':
       resultsEl.hidden = true;
+      closeDrawer();
       break;
 
     case 'loading':
+      setDrawerState('open');
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
@@ -729,6 +708,7 @@ function setResultState(mode, message) {
     case 'results': {
       const fromId = state.from.stop.sourceStopId;
       const toId   = state.to.stop.sourceStopId;
+      setDrawerState('open');
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
@@ -761,21 +741,21 @@ function setResultState(mode, message) {
     }
 
     case 'no-route':
+      setDrawerState('open');
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="empty-state">
-          <div class="empty-state__icon">
-            <svg><use href="#icon-warning"/></svg>
-          </div>
+          <div class="empty-state__icon"><svg><use href="#icon-warning"/></svg></div>
           <div class="empty-state__title">No route found</div>
-          <p class="empty-state__sub">No matatu connection between these stops.</p>
+          <p class="empty-state__sub">No matatu connection between these stops. Try a nearby stage name.</p>
         </div>`;
       break;
 
     case 'offline':
-      break; // unused — routing always attempted if graph is loaded
+      break;
 
     case 'error':
+      setDrawerState('open');
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="empty-state">
@@ -902,55 +882,70 @@ function showPlanToast(msg) {
 // ─── Render shell ──────────────────────────────────────────
 function renderShell() {
   el('view-plan').innerHTML = `
-    <!-- App header -->
-    <div class="view-header">
+    <!-- Interactive map (full-screen, z:1) -->
+    <div id="plan-map-container" class="plan-map-container">
+      <!-- Schematic fallback — visible while tiles load or offline -->
+      <div class="plan-map-schematic" aria-hidden="true" id="plan-map-bg"></div>
+    </div>
+
+    <!-- Floating header over map -->
+    <div class="plan-map-header">
       <span class="app-name">Matwana</span>
       <span class="gtfs-meta" id="plan-gtfs-meta">GTFS data · loading…</span>
     </div>
 
-    <!-- Search card -->
-    <div class="search-card">
-      <div class="fields-with-swap">
-        <div class="fields-stack">
-          <button class="stop-field" id="plan-from-btn" aria-label="Choose origin stop">
-            <div class="stop-field__dot stop-field__dot--from"></div>
-            <span class="stop-field__text" id="plan-from-text">Choose origin</span>
-          </button>
-          <button class="stop-field" id="plan-to-btn" aria-label="Choose destination stop">
-            <div class="stop-field__dot stop-field__dot--to"></div>
-            <span class="stop-field__text" id="plan-to-text">Choose destination</span>
-          </button>
-        </div>
-        <button class="swap-btn" id="plan-swap-btn" aria-label="Swap origin and destination">
-          <svg><use href="#icon-swap"/></svg>
-        </button>
+    <!-- Bottom drawer -->
+    <div id="plan-bottom-drawer" class="plan-drawer plan-drawer--idle">
+      <div class="plan-drawer__handle"></div>
+
+      <!-- Collapsed: search pill -->
+      <div id="plan-drawer-pill" class="plan-drawer__pill">
+        <svg style="width:16px;height:16px;color:var(--text-secondary);flex-shrink:0"><use href="#icon-search"/></svg>
+        <span style="flex:1;font-size:15px;color:var(--text-secondary)">Where to?</span>
       </div>
-      <button class="find-btn" id="plan-find-btn" disabled>
-        Find Route
-      </button>
+
+      <!-- Expanded: search + results -->
+      <div id="plan-drawer-content" class="plan-drawer__content" hidden>
+        <!-- Search card -->
+        <div class="search-card" style="margin:0 0 8px">
+          <div class="fields-with-swap">
+            <div class="fields-stack">
+              <button class="stop-field" id="plan-from-btn" aria-label="Choose origin stop">
+                <div class="stop-field__dot stop-field__dot--from"></div>
+                <span class="stop-field__text" id="plan-from-text">Choose origin</span>
+              </button>
+              <button class="stop-field" id="plan-to-btn" aria-label="Choose destination stop">
+                <div class="stop-field__dot stop-field__dot--to"></div>
+                <span class="stop-field__text" id="plan-to-text">Choose destination</span>
+              </button>
+            </div>
+            <button class="swap-btn" id="plan-swap-btn" aria-label="Swap origin and destination">
+              <svg><use href="#icon-swap"/></svg>
+            </button>
+          </div>
+          <button class="find-btn" id="plan-find-btn" disabled>Find Route</button>
+        </div>
+
+        <!-- Saved journeys -->
+        <div id="plan-saved" class="saved-section" hidden></div>
+
+        <!-- Results -->
+        <div id="plan-results" hidden></div>
+      </div>
     </div>
 
-    <!-- Route map background (empty state) -->
-    <div id="plan-map-bg" class="plan-map-bg" aria-hidden="true"></div>
-
-    <!-- Saved journeys -->
-    <div id="plan-saved" class="saved-section" hidden></div>
-
-    <!-- Results container -->
-    <div id="plan-results" hidden></div>
-
-    <!-- Leg detail sheet -->
+    <!-- Leg detail sheet (z:20) -->
     <div class="detail-sheet" id="plan-leg-detail" hidden></div>
 
-    <!-- Deviation report sheet -->
+    <!-- Deviation report sheet (z:20) -->
     <div class="detail-sheet" id="plan-deviation-sheet" hidden></div>
 
-    <!-- Toast -->
+    <!-- Toast (z:30) -->
     <div id="plan-toast" hidden
-      style="position:fixed;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface-2);color:var(--text-primary);padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;white-space:nowrap;border:1px solid rgba(255,255,255,.08)">
+      style="position:absolute;bottom:84px;left:50%;transform:translateX(-50%);background:var(--surface-2);color:var(--text-primary);padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:200;white-space:nowrap;border:1px solid rgba(255,255,255,.08)">
     </div>
 
-    <!-- Autocomplete overlay -->
+    <!-- Autocomplete overlay (z:40) -->
     <div class="autocomplete-overlay" id="plan-autocomplete" hidden>
       <div class="autocomplete-header">
         <button class="autocomplete-back" id="plan-ac-back" aria-label="Close search">
@@ -968,7 +963,15 @@ function renderShell() {
     </div>
   `;
 
-  // Wire events
+  // Pill → open drawer
+  el('plan-drawer-pill').addEventListener('click', openDrawer);
+
+  // Tap map area while drawer is open → close back to idle
+  el('plan-map-container').addEventListener('click', () => {
+    if (_drawerState === 'open') closeDrawer();
+  });
+
+  // Wire search events
   el('plan-from-btn').addEventListener('click', () => openAutocomplete('from'));
   el('plan-to-btn').addEventListener('click', () => openAutocomplete('to'));
   el('plan-swap-btn').addEventListener('click', swapStops);
@@ -989,23 +992,29 @@ export function initPlan() {
   renderShell();
   renderSavedJourneys();
 
-  // Schematic map renders immediately — no graph dependency
+  // Schematic SVG into the fallback div (shows while Leaflet tiles load)
   renderRouteMapBg();
 
-  // Pre-load routable stops index and route stops so both are ready before first keystroke
+  // Pre-load supporting data before first keystroke
   loadRoutableStops();
   getRouteStops();
 
-  // Update GTFS meta label when graph loads
-  document.addEventListener('graph:ready', e => {
+  // Initialise Leaflet map once the graph is ready (so we have stopsIndex + routeStops)
+  document.addEventListener('graph:ready', async e => {
     const meta = e.detail;
-    const synced = new Date(meta.synced);
-    const diffMs = Date.now() - synced.getTime();
-    const diffDays = Math.floor(diffMs / 86_400_000);
-    const label = diffDays === 0 ? 'today'
-      : diffDays === 1 ? 'yesterday'
-      : `${diffDays} days ago`;
-    el('plan-gtfs-meta').textContent = `GTFS data · last synced ${label}`;
+    const synced   = new Date(meta.synced);
+    const diffDays = Math.floor((Date.now() - synced.getTime()) / 86_400_000);
+    el('plan-gtfs-meta').textContent = `GTFS data · last synced ${
+      diffDays === 0 ? 'today' : diffDays === 1 ? 'yesterday' : `${diffDays} days ago`
+    }`;
+
+    const si         = getStopsIndex();
+    const routeStops = await getRouteStops();
+    const routable   = _routableStops;
+    const container  = el('plan-map-container');
+    if (container && si) {
+      await initTransitMap(container, si, routeStops, routable);
+    }
   });
 
   document.addEventListener('graph:error', () => {

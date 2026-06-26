@@ -44,6 +44,18 @@ registerRoute(
   })
 );
 
+// ─── Map tiles — cache-first, 7-day TTL, 2000 tile cap ─────
+// CartoDB Dark Matter tiles cached as user browses Nairobi.
+registerRoute(
+  ({ url }) => url.hostname.endsWith('.basemaps.cartocdn.com'),
+  new CacheFirst({
+    cacheName: 'map-tiles',
+    plugins: [
+      new ExpirationPlugin({ maxEntries: 2000, maxAgeSeconds: 60 * 60 * 24 * 7 }),
+    ],
+  })
+);
+
 // ─── Skip waiting immediately ───────────────────────────────
 self.addEventListener('message', e => {
   if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
