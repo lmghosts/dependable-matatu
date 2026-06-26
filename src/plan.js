@@ -17,13 +17,64 @@ function escAttr(s) {
 
 // ─── Route stops (lazy-loaded) ─────────────────────────────
 let _routeStops = null;
+let _stopDirections = null; // stopId → "CBD" | "Thika" | "Roysambu" | ...
+
+const _CBD_WORDS = ['odeon','kencom','bus station','koja','railways','otc',
+  'tusker','ronald ngala','commercial','muthurwa','town terminal',
+  'cabanas','ngara','ambassadeur','archives','city hall'];
+const _isCBD = name => _CBD_WORDS.some(c => name.toLowerCase().includes(c));
+
+function _cleanTerminus(name) {
+  return name
+    .replace(/\b(terminus|terminal|town terminal|stage|bus stop|bus station|mwisho)\b/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+function _computeStopDirections(routeStops) {
+  const dirs = {};
+  for (const [, stops] of Object.entries(routeStops)) {
+    if (stops.length < 2) continue;
+    const firstCBD = _isCBD(stops[0].name);
+    const lastCBD  = _isCBD(stops[stops.length - 1].name);
+
+    if (lastCBD && !firstCBD) {
+      // Route goes TO CBD — non-terminus stops are heading toward CBD
+      const away = _cleanTerminus(stops[0].name) || 'CBD';
+      stops.forEach((s, i) => {
+        if (i < stops.length - 1 && !dirs[s.id]) dirs[s.id] = { to: 'CBD', from: away };
+      });
+    } else if (firstCBD && !lastCBD) {
+      // Route goes FROM CBD — non-start stops are heading away from CBD
+      const away = _cleanTerminus(stops[stops.length - 1].name);
+      if (away) {
+        stops.forEach((s, i) => {
+          if (i > 0 && !dirs[s.id]) dirs[s.id] = { to: away, from: 'CBD' };
+        });
+      }
+    } else if (!firstCBD && !lastCBD) {
+      // Cross-suburban — show actual from→to but only for stops near each end
+      const from = _cleanTerminus(stops[0].name);
+      const to   = _cleanTerminus(stops[stops.length - 1].name);
+      if (from && to) {
+        stops.forEach((s, i) => {
+          if (!dirs[s.id]) dirs[s.id] = { to, from };
+        });
+      }
+    }
+  }
+  return dirs;
+}
+
 async function getRouteStops() {
   if (_routeStops) return _routeStops;
   try {
     const res = await fetch('/route-stops.json');
     _routeStops = await res.json();
+    _stopDirections = _computeStopDirections(_routeStops);
   } catch {
     _routeStops = {};
+    _stopDirections = {};
   }
   return _routeStops;
 }
@@ -130,25 +181,30 @@ function renderSuggestions(query) {
 
   const trimmed = query.trim();
 
+  function dirLabel(stop) {
+    const d = _stopDirections?.[stop.sourceStopId];
+    if (!d) return '';
+    return `<span class="ac-dir-tag">→ ${d.to}</span>`;
+  }
+
+  function stopItemHtml(stop) {
+    return `
+      <button class="autocomplete-item" data-id="${stop.sourceStopId}" data-name="${stop.name}">
+        <div class="autocomplete-item__icon"><svg><use href="#icon-pin"/></svg></div>
+        <div class="autocomplete-item__body">
+          <div class="autocomplete-item__name">${stop.name}</div>
+          <div class="autocomplete-item__sub">${dirLabel(stop)}</div>
+        </div>
+      </button>`;
+  }
+
   if (trimmed.length < 1) {
-    // Show first ~8 routable stops as a browse list
     const nearby = rankStops(getAllStops(si)).slice(0, 8);
     if (!nearby.length) {
       list.innerHTML = `<p class="autocomplete-empty">Type to search for stops</p>`;
       return;
     }
-    list.innerHTML = `
-      <div class="autocomplete-section-hd">All stops</div>
-      ${nearby.map(stop => `
-        <button class="autocomplete-item" data-id="${stop.sourceStopId}" data-name="${stop.name}">
-          <div class="autocomplete-item__icon"><svg><use href="#icon-pin"/></svg></div>
-          <div>
-            <div class="autocomplete-item__name">${stop.name}</div>
-            <div class="autocomplete-item__sub">${stop.locationType === 'PARENT_STATION' ? 'Station' : 'Bus stop'}</div>
-          </div>
-        </button>
-      `).join('')}
-    `;
+    list.innerHTML = `<div class="autocomplete-section-hd">All stops</div>${nearby.map(stopItemHtml).join('')}`;
     list.querySelectorAll('.autocomplete-item').forEach(btn => {
       const stop = nearby.find(s => s.sourceStopId === btn.dataset.id);
       btn.addEventListener('click', () => selectStop(stop, btn.dataset.name));
@@ -164,21 +220,7 @@ function renderSuggestions(query) {
     return;
   }
 
-  const isRecent = false;
-  list.innerHTML = `
-    <div class="autocomplete-section-hd">${isRecent ? 'Nearby stops' : 'Results'}</div>
-    ${results.slice(0, 8).map(stop => `
-      <button class="autocomplete-item" data-id="${stop.sourceStopId}" data-name="${stop.name}">
-        <div class="autocomplete-item__icon">
-          <svg><use href="#icon-pin"/></svg>
-        </div>
-        <div>
-          <div class="autocomplete-item__name">${stop.name}</div>
-          <div class="autocomplete-item__sub">${stop.locationType.replace(/_/g, ' ').toLowerCase()}</div>
-        </div>
-      </button>
-    `).join('')}
-  `;
+  list.innerHTML = `<div class="autocomplete-section-hd">Results</div>${results.slice(0, 8).map(stopItemHtml).join('')}`;
 
   list.querySelectorAll('.autocomplete-item').forEach(btn => {
     btn.addEventListener('click', () => {
