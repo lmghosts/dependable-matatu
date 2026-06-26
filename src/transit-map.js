@@ -186,31 +186,14 @@ export async function initTransitMap(container, si, routeStops, routableStops) {
   const svg = container.querySelector('#transit-svg');
   if (!svg) return;
 
-  // Overlay TfL Go-style stop markers (hollow circles at major terminals)
-  const stopMarkers = buildStopMarkers(si, routableStops);
-  if (stopMarkers) {
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    g.id = 'tm-stops';
-    g.innerHTML = stopMarkers;
-    svg.appendChild(g);
-  }
-
-  // CBD hub marker
-  const [cbdX, cbdY] = geoToSvg(36.817223, -1.286389);
-  const cbdGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-  cbdGroup.innerHTML = `
-    <circle cx="${cbdX.toFixed(1)}" cy="${cbdY.toFixed(1)}" r="12" fill="none" stroke="#F5F3EE" stroke-width="2" opacity="0.7"/>
-    <circle cx="${cbdX.toFixed(1)}" cy="${cbdY.toFixed(1)}" r="5"  fill="#F5F3EE" opacity="0.9"/>
-    <text x="${(cbdX+15).toFixed(1)}" y="${(cbdY+4).toFixed(1)}" fill="#A8A8A0" font-size="18" font-family="Space Grotesk,sans-serif" font-weight="700" opacity="0.8">CBD</text>
-  `;
-  svg.appendChild(cbdGroup);
-
-  // Initial view: centred on CBD, showing ~45% of map width
+  // Initial view: centred on CBD area of the designer's SVG (4147×2764 canvas)
+  // Stop markers and terminal labels are embedded in the SVG — no JS overlay needed.
+  const CBD_X = 1900, CBD_Y = 1490;
   const initW = PW * 0.58;
   const initH = initW * (PH / PW);
   const initVB = {
-    x: cbdX - initW * 0.42,
-    y: cbdY - initH * 0.48,
+    x: CBD_X - initW * 0.42,
+    y: CBD_Y - initH * 0.48,
     w: initW, h: initH,
   };
 
