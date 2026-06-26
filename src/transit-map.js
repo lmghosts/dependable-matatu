@@ -193,15 +193,15 @@ export async function initTransitMap(container, si, routeStops, routableStops) {
   // slice fills the portrait container on mobile; meet leaves blank space below.
   svg.setAttribute('preserveAspectRatio', 'xMidYMid slice');
 
-  // Initial view: centred on CBD area of the designer's SVG (4147×2764 canvas).
-  // CBD (36.82°E, 1.286°S) sits in the right portion of this canvas (~x=3562, y=2179).
-  // Stop markers and terminal labels are embedded in the SVG — no JS overlay needed.
-  const CBD_X = 3562, CBD_Y = 2179;
-  const initW = PW * 0.32;
+  // Initial view: inner-city overview centred on the network hub (~Chiromo/City Park).
+  // Shows Karura Forest→South B vertically, Westlands→Eastleigh horizontally.
+  // Users pan from here into the CBD detail ("City Center — See Inset").
+  const MAP_CX = 2050, MAP_CY = 1200;
+  const initW = PW * 0.58;
   const initH = initW * (PH / PW);
   const initVB = {
-    x: CBD_X - initW * 0.5,
-    y: CBD_Y - initH * 0.5,
+    x: MAP_CX - initW * 0.5,
+    y: MAP_CY - initH * 0.5,
     w: initW, h: initH,
   };
 
