@@ -462,62 +462,166 @@ function closeLegDetail() {
 }
 
 // ─── Route map background (empty-state decoration) ─────────
-async function renderRouteMapBg() {
+// Schematic transit map — 90°/45° angles only, modelled on the Digital Matatus
+// Nairobi route map. Five major corridors radiating from the CBD hub.
+function renderRouteMapBg() {
   const mapDiv = el('plan-map-bg');
   if (!mapDiv) return;
-  const si = getStopsIndex();
-  if (!si) return;
 
-  const routeStops = await getRouteStops();
+  // Corridor colours matching app design tokens
+  const SKY    = '#2EC4F0'; // Thika Rd
+  const FLAME  = '#FF5722'; // Mombasa/Eastlands
+  const GREEN  = '#1FB876'; // Ngong Rd
+  const VIOLET = '#7B5CFF'; // Jogoo Rd
+  const AMBER  = '#FFC400'; // Westlands/Kangemi
 
-  // Build id → [lat, lon] by looking up each unique stop name directly
-  // (avoids the letter-prefix coverage gap of the autocomplete strategy)
-  const idToPos = new Map();
-  const unique = new Map(); // id → name
-  for (const stops of Object.values(routeStops)) {
-    for (const s of stops) {
-      if (!unique.has(s.id)) unique.set(s.id, s.name);
-    }
-  }
+  const SW = 1.5; // stroke width for main lines
+  const SB = 1.0; // stroke width for branches
+  const SO = 0.10; // stroke opacity
 
-  for (const [id, name] of unique) {
-    const hits = si.findStopsByName(name.slice(0, 6));
-    for (const r of hits) {
-      if (r.lat && r.lon && r.name.toLowerCase() === name.toLowerCase()) {
-        idToPos.set(id, [r.lat, r.lon]);
-        break;
-      }
-    }
-    // Fallback: accept any hit with the same sourceStopId
-    if (!idToPos.has(id)) {
-      const exact = si.findStopsByName(name).find(r => r.sourceStopId === id && r.lat);
-      if (exact) idToPos.set(id, [exact.lat, exact.lon]);
-    }
-  }
-
-  if (idToPos.size < 20) return;
-
-  const LAT_MIN = -1.46, LAT_MAX = -1.07;
-  const LON_MIN = 36.67, LON_MAX = 37.12;
-  const W = 400, H = 650;
-  const toX = lon => ((lon - LON_MIN) / (LON_MAX - LON_MIN) * W).toFixed(1);
-  const toY = lat => ((1 - (lat - LAT_MIN) / (LAT_MAX - LAT_MIN)) * H).toFixed(1);
-
-  const paths = [];
-  for (const stops of Object.values(routeStops)) {
-    const pts = stops.map(s => idToPos.get(s.id)).filter(Boolean);
-    if (pts.length < 2) continue;
-    const d = pts.map(([lat, lon], i) => `${i ? 'L' : 'M'}${toX(lon)},${toY(lat)}`).join('');
-    paths.push(`<path d="${d}"/>`);
-  }
-  if (!paths.length) return;
-
-  mapDiv.innerHTML = `<svg class="route-map-svg" viewBox="0 0 ${W} ${H}"
+  mapDiv.innerHTML = `<svg class="route-map-svg" viewBox="0 0 400 680"
     preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g fill="none" stroke="var(--accent-sky)" stroke-width="1"
-       stroke-linecap="round" stroke-linejoin="round">
-      ${paths.join('')}
+    <defs>
+      <style>
+        .rm-stop { fill: none; stroke-width: 2; }
+        .rm-lbl  { font-family: "Space Grotesk", sans-serif; font-size: 8px; font-weight: 600; }
+      </style>
+    </defs>
+
+    <!-- ── THIKA ROAD CORRIDOR (NE) ── -->
+    <g stroke="${SKY}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${SO}">
+      <!-- Main trunk: CBD → NE diagonal → N → NE → terminus -->
+      <path stroke-width="${SW}" d="M200,400 L260,340 L260,190 L320,130 L400,130"/>
+      <!-- Branch 237/45: split at Roysambu junction -->
+      <path stroke-width="${SB}" d="M260,250 L320,190 L400,190"/>
+      <!-- Branch to Kahawa West/Sukari -->
+      <path stroke-width="${SB}" d="M260,190 L220,150 L220,50"/>
+      <!-- Branch 104 terminus spur -->
+      <path stroke-width="${SB}" d="M320,130 L360,90 L400,90"/>
     </g>
+    <!-- Thika Rd stops -->
+    <g class="rm-stop" stroke="${SKY}" opacity="${SO + 0.04}">
+      <circle cx="260" cy="340" r="3"/>
+      <circle cx="260" cy="270" r="3"/>
+      <circle cx="260" cy="210" r="3"/>
+      <circle cx="220" cy="150" r="3"/>
+      <circle cx="260" cy="190" r="2.5"/>
+      <circle cx="320" cy="130" r="3"/>
+      <circle cx="360" cy="90"  r="2.5"/>
+    </g>
+    <!-- Thika Rd labels -->
+    <g class="rm-lbl" fill="${SKY}" opacity="${SO + 0.02}">
+      <text x="266" y="285">237</text>
+      <text x="266" y="215">104</text>
+      <text x="224" y="130">145</text>
+      <text x="326" y="115">45</text>
+    </g>
+
+    <!-- ── MOMBASA / EASTLANDS ROAD (E → SE) ── -->
+    <g stroke="${FLAME}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${SO}">
+      <!-- Main: CBD → E → SE → S (Kitengela) -->
+      <path stroke-width="${SW}" d="M200,400 L310,400 L380,470 L380,580"/>
+      <!-- Branch: E → NE (Eastleigh/Huruma) -->
+      <path stroke-width="${SB}" d="M270,400 L330,340 L330,240 L400,240"/>
+      <!-- Branch: SE → S (Mlolongo/Cabanas) -->
+      <path stroke-width="${SB}" d="M310,400 L310,510 L370,570 L400,570"/>
+    </g>
+    <!-- Mombasa Rd stops -->
+    <g class="rm-stop" stroke="${FLAME}" opacity="${SO + 0.04}">
+      <circle cx="270" cy="400" r="3"/>
+      <circle cx="310" cy="400" r="3"/>
+      <circle cx="330" cy="340" r="2.5"/>
+      <circle cx="380" cy="470" r="3"/>
+      <circle cx="310" cy="510" r="2.5"/>
+      <circle cx="380" cy="540" r="2.5"/>
+    </g>
+    <!-- Mombasa Rd labels -->
+    <g class="rm-lbl" fill="${FLAME}" opacity="${SO + 0.02}">
+      <text x="316" y="394">110</text>
+      <text x="336" y="334">33</text>
+      <text x="316" y="454">34</text>
+    </g>
+
+    <!-- ── NGONG ROAD (SW) ── -->
+    <g stroke="${GREEN}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${SO}">
+      <!-- Main: CBD → SW → S (Ngong/Kiserian) -->
+      <path stroke-width="${SW}" d="M200,400 L130,470 L130,610"/>
+      <!-- Branch west: Rongai -->
+      <path stroke-width="${SB}" d="M165,435 L90,435 L30,495 L0,495"/>
+      <!-- Branch east: Langata/Karen -->
+      <path stroke-width="${SB}" d="M130,530 L190,590 L190,650"/>
+    </g>
+    <!-- Ngong Rd stops -->
+    <g class="rm-stop" stroke="${GREEN}" opacity="${SO + 0.04}">
+      <circle cx="165" cy="435" r="3"/>
+      <circle cx="130" cy="470" r="3"/>
+      <circle cx="90"  cy="435" r="2.5"/>
+      <circle cx="130" cy="540" r="2.5"/>
+      <circle cx="190" cy="590" r="2.5"/>
+    </g>
+    <!-- Ngong Rd labels -->
+    <g class="rm-lbl" fill="${GREEN}" opacity="${SO + 0.02}">
+      <text x="136" y="485">125</text>
+      <text x="60"  y="428">126</text>
+      <text x="136" y="555">111</text>
+    </g>
+
+    <!-- ── JOGOO ROAD (E) ── -->
+    <g stroke="${VIOLET}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${SO}">
+      <!-- Main: CBD → E (Buruburu/Umoja) -->
+      <path stroke-width="${SW}" d="M200,400 L400,400"/>
+      <!-- Branch S: Donholm/Kayole -->
+      <path stroke-width="${SB}" d="M290,400 L290,490 L360,560 L400,560"/>
+      <!-- Branch NE: Kasarani -->
+      <path stroke-width="${SB}" d="M350,400 L400,350"/>
+    </g>
+    <!-- Jogoo Rd stops -->
+    <g class="rm-stop" stroke="${VIOLET}" opacity="${SO + 0.04}">
+      <circle cx="260" cy="400" r="3"/>
+      <circle cx="320" cy="400" r="3"/>
+      <circle cx="380" cy="400" r="2.5"/>
+      <circle cx="290" cy="490" r="2.5"/>
+      <circle cx="360" cy="560" r="2.5"/>
+    </g>
+    <!-- Jogoo Rd labels -->
+    <g class="rm-lbl" fill="${VIOLET}" opacity="${SO + 0.02}">
+      <text x="248" y="393">58</text>
+      <text x="308" y="393">23</text>
+      <text x="296" y="453">35</text>
+    </g>
+
+    <!-- ── WESTLANDS / KANGEMI (W → NW) ── -->
+    <g stroke="${AMBER}" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="${SO}">
+      <!-- Main: CBD → W → NW (Kangemi/Uthiru) -->
+      <path stroke-width="${SW}" d="M200,400 L100,400 L40,340 L0,340"/>
+      <!-- Branch N: Westlands/Ruaka -->
+      <path stroke-width="${SB}" d="M100,400 L100,280 L60,240 L60,100"/>
+      <!-- Branch NE from Westlands: Limuru Rd -->
+      <path stroke-width="${SB}" d="M100,280 L150,230 L150,80 L200,30"/>
+      <!-- Branch W: Kikuyu/Dagoretti -->
+      <path stroke-width="${SB}" d="M40,340 L0,300"/>
+    </g>
+    <!-- Westlands stops -->
+    <g class="rm-stop" stroke="${AMBER}" opacity="${SO + 0.04}">
+      <circle cx="150" cy="400" r="3"/>
+      <circle cx="100" cy="400" r="3"/>
+      <circle cx="100" cy="330" r="2.5"/>
+      <circle cx="100" cy="280" r="3"/>
+      <circle cx="60"  cy="240" r="2.5"/>
+      <circle cx="40"  cy="340" r="2.5"/>
+      <circle cx="150" cy="230" r="2.5"/>
+    </g>
+    <!-- Westlands labels -->
+    <g class="rm-lbl" fill="${AMBER}" opacity="${SO + 0.02}">
+      <text x="140" y="394">30</text>
+      <text x="68"  y="394">105</text>
+      <text x="66"  y="260">107</text>
+      <text x="46"  y="326">115</text>
+    </g>
+
+    <!-- ── CBD HUB ── -->
+    <circle cx="200" cy="400" r="6" fill="none" stroke="#F5F3EE" stroke-width="1.5" opacity="0.18"/>
+    <circle cx="200" cy="400" r="3" fill="#F5F3EE" opacity="0.15"/>
   </svg>`;
 }
 
@@ -819,7 +923,10 @@ export function initPlan() {
   renderShell();
   renderSavedJourneys();
 
-  // Update GTFS meta when graph loads + render map background
+  // Schematic map renders immediately — no graph dependency
+  renderRouteMapBg();
+
+  // Update GTFS meta label when graph loads
   document.addEventListener('graph:ready', e => {
     const meta = e.detail;
     const synced = new Date(meta.synced);
@@ -829,7 +936,6 @@ export function initPlan() {
       : diffDays === 1 ? 'yesterday'
       : `${diffDays} days ago`;
     el('plan-gtfs-meta').textContent = `GTFS data · last synced ${label}`;
-    renderRouteMapBg();
   });
 
   document.addEventListener('graph:error', () => {
