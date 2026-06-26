@@ -419,8 +419,11 @@ function renderForm() {
 // ─── Shell ─────────────────────────────────────────────────
 function renderShell() {
   el('view-fares').innerHTML = `
-    <div class="view-header">
-      <span class="app-name">Matwana</span>
+    <div class="view-header" style="padding-bottom:4px">
+      <div>
+        <div class="screen-title">Fares</div>
+        <div class="screen-sub">Crowd-sourced matatu fares</div>
+      </div>
     </div>
     <div id="fares-form-section" class="pb-safe"></div>
   `;

@@ -89,14 +89,27 @@ function getAllStops(si) {
 }
 
 // ─── Routes tab ────────────────────────────────────────────
-function renderRoutesList(si) {
+function renderRoutesList(si, query = '') {
   const panel = el('disc-panel-routes');
   if (!si) {
     panel.innerHTML = `<p class="text-secondary" style="padding:20px 16px;font-size:14px">Routing graph loading…</p>`;
     return;
   }
 
-  const routes = getKnownRoutes();
+  const q = query.trim().toLowerCase();
+  const allRoutes = getKnownRoutes();
+  const routes = q
+    ? allRoutes.filter(r =>
+        r.name.includes(q) ||
+        r.long.toLowerCase().includes(q) ||
+        r.sacco.toLowerCase().includes(q) ||
+        r.faresName.toLowerCase().includes(q))
+    : allRoutes;
+
+  if (!routes.length) {
+    panel.innerHTML = `<p class="autocomplete-empty">No routes found for "${query}"</p>`;
+    return;
+  }
 
   panel.innerHTML = routes.map(r => `
     <button class="list-item"
@@ -130,14 +143,27 @@ function getKnownRoutes() {
 }
 
 // ─── SACCOs tab ────────────────────────────────────────────
-function renderSaccosList(si) {
+function renderSaccosList(si, query = '') {
   const panel = el('disc-panel-saccos');
 
-  const saccos = [
+  const allSaccos = [
     { id: 'GM', name: 'Githurai Matatu SACCO', routes: ['104', '45', '237'], stops: 'Thika Rd corridor' },
     { id: 'UM', name: 'Umoinner SACCO', routes: ['237', '58'], stops: 'Eastlands · CBD' },
     { id: 'CH', name: 'Citi Hoppa SACCO', routes: ['58', '33'], stops: 'Mombasa Rd · Westlands' },
   ];
+
+  const q = query.trim().toLowerCase();
+  const saccos = q
+    ? allSaccos.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.stops.toLowerCase().includes(q) ||
+        s.routes.some(r => r.includes(q)))
+    : allSaccos;
+
+  if (!saccos.length) {
+    panel.innerHTML = `<p class="autocomplete-empty">No SACCOs found for "${query}"</p>`;
+    return;
+  }
 
   panel.innerHTML = saccos.map(sacco => `
     <button class="list-item" data-sacco-id="${sacco.id}">
@@ -319,14 +345,28 @@ function hideDetail() {
 // ─── Search ────────────────────────────────────────────────
 function onSearch(query) {
   const si = getStopsIndex();
-  if (activeTab === 'stops') renderStopsList(si, query);
+  if (activeTab === 'stops')  renderStopsList(si, query);
+  if (activeTab === 'routes') renderRoutesList(si, query);
+  if (activeTab === 'saccos') renderSaccosList(si, query);
 }
 
 // ─── Shell ─────────────────────────────────────────────────
 function renderShell() {
   el('view-discover').innerHTML = `
-    <div class="view-header">
-      <span class="app-name">Matwana</span>
+    <div class="view-header" style="padding-bottom:4px">
+      <div>
+        <div class="screen-title">Discover</div>
+        <div class="screen-sub">Stops, routes &amp; SACCOs</div>
+      </div>
+    </div>
+
+    <!-- Search — universal, above tabs -->
+    <div class="discover-search">
+      <div class="discover-search-wrap">
+        <svg><use href="#icon-search"/></svg>
+        <input class="discover-search-input" id="disc-search"
+          type="search" placeholder="Search stops, routes, or SACCOs…" autocomplete="off" />
+      </div>
     </div>
 
     <!-- Tabs -->
@@ -337,15 +377,6 @@ function renderShell() {
         aria-selected="false" aria-controls="disc-panel-routes">Routes</button>
       <button class="tab" id="disc-tab-saccos" role="tab"
         aria-selected="false" aria-controls="disc-panel-saccos">SACCOs</button>
-    </div>
-
-    <!-- Search -->
-    <div class="discover-search">
-      <div class="discover-search-wrap">
-        <svg><use href="#icon-search"/></svg>
-        <input class="discover-search-input" id="disc-search"
-          type="search" placeholder="Search stops…" autocomplete="off" />
-      </div>
     </div>
 
     <!-- Panels -->

@@ -171,9 +171,22 @@ svg { display: block; }
   align-items: baseline;
   justify-content: space-between;
 }
+.screen-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -.03em;
+  line-height: 1.1;
+}
+.screen-sub {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
 .app-name {
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: -.03em;
   color: var(--accent-flame);
