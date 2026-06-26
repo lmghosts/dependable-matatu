@@ -96,11 +96,24 @@ async function loadRoutableStops() {
   }
 }
 
+// rankStops for ORIGIN field — require the stop to have boardable trips.
+// Terminal stops (Odeon, Koja, etc.) have arrivals but no departures, so they
+// are NOT in routableStops. They are valid destinations but not valid origins.
 function rankStops(stops) {
   if (!_routableStops) return stops;
   return stops
     .filter(s => _routableStops[s.sourceStopId] !== undefined)
     .sort((a, b) => (_routableStops[b.sourceStopId] ?? 0) - (_routableStops[a.sourceStopId] ?? 0));
+}
+
+// rankDestStops for DESTINATION field — all stops are valid alight points;
+// sort boardable stops to the top, but include terminals too.
+function rankDestStops(stops) {
+  return stops.slice().sort((a, b) => {
+    const ca = _routableStops?.[a.sourceStopId] ?? 0;
+    const cb = _routableStops?.[b.sourceStopId] ?? 0;
+    return cb - ca;
+  });
 }
 
 // ─── State ─────────────────────────────────────────────────
@@ -198,8 +211,11 @@ function renderSuggestions(query) {
       </button>`;
   }
 
+  const isTo = state.activeField === 'to';
+  const rank = isTo ? rankDestStops : rankStops;
+
   if (trimmed.length < 1) {
-    const nearby = rankStops(getAllStops(si)).slice(0, 8);
+    const nearby = rank(getAllStops(si)).slice(0, 8);
     if (!nearby.length) {
       list.innerHTML = `<p class="autocomplete-empty">Type to search for stops</p>`;
       return;
@@ -212,8 +228,8 @@ function renderSuggestions(query) {
     return;
   }
 
-  // Filter to stops with trip service, sorted by route count (most-connected first)
-  const results = rankStops(si.findStopsByName(trimmed));
+  // For 'to' field: include terminal stops (no departure but valid alight points)
+  const results = rank(si.findStopsByName(trimmed));
 
   if (!results.length) {
     list.innerHTML = `<p class="autocomplete-empty">No stops found for "${trimmed}" — try a nearby stage name</p>`;
