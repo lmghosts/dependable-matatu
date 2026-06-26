@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "cap:sync": "npm run build && cap sync",
     "pipeline": "node pipeline/fetch-gtfs.js",
+    "pipeline:bidir": "node pipeline/add-reverse-trips.js",
     "make-fixture": "node pipeline/make-fixture.js",
     "spike": "node pipeline/make-fixture.js && node pipeline/spike-graph-size.js"
   },
