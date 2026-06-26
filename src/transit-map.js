@@ -16,8 +16,8 @@
 //
 // This is an approximation — good enough for terminal-level markers.
 const REF = {
-  geo1: [36.817223, -1.286389], svgPt1: [1050, 950], // CBD anchor
-  geo2: [36.985,   -1.075],    svgPt2: [1480, 580],  // Thika anchor
+  geo1: [36.817223, -1.286389], svgPt1: [1900, 1490], // CBD anchor (4147×2764 canvas)
+  geo2: [36.985,   -1.075],    svgPt2: [2690, 920],   // Thika Road anchor
 };
 const [dx_lon, dx_lat] = [
   (REF.svgPt2[0] - REF.svgPt1[0]) / (REF.geo2[0] - REF.geo1[0]),
@@ -52,9 +52,9 @@ function buildStopMarkers(si, routableStops) {
 }
 
 // ─── Pan / zoom ────────────────────────────────────────────
-// PDF canvas is 2592 × 1728 points (landscape 36"×24").
-// Initial view centres on CBD at ~40% zoom so the core network fills the screen.
-const PW = 2592, PH = 1728;
+// Designer SVG canvas is 4147 × 2764.
+// Initial view centres on CBD at ~58% zoom so the core network fills the screen.
+const PW = 4147, PH = 2764;
 
 function initPanZoom(svg, initVB) {
   let vb = { ...initVB };
