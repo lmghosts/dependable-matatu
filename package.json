@@ -16,7 +16,8 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/core": "^8.4.1",
     "@capacitor/ios": "^8.4.1",
-    "minotor": "^3.0.1"
+    "minotor": "^3.0.1",
+    "pdfjs-dist": "^6.0.227"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.4.1",
