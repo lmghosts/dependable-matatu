@@ -6,7 +6,7 @@ import { enqueue } from './lib/offline-queue.js';
 import { getDeviceId } from './lib/device-id.js';
 import { initTransitMap } from './transit-map.js';
 // transit-map.js is now a pure SVG renderer — no external tiles
-import { renderStepLine, wireStepNavButtons } from './step-line.js';
+import { renderStepLine, wireStepNavButtons, routeColor } from './step-line.js';
 
 function esc(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -76,6 +76,28 @@ function fmtDuration(dur) {
   const total = Math.round(dur.toSeconds() / 60);
   if (total < 60) return `${total} min`;
   return `${Math.floor(total / 60)}h ${total % 60}m`;
+}
+
+function corridorChip(routeName) {
+  const color = routeColor(routeName);
+  if (color === '#2EC4F0') return '<span class="chip chip-thika">&#9679; Thika Rd</span>';
+  if (color === '#1FB876') return '<span class="chip chip-ngong">&#9679; Ngong Rd</span>';
+  if (color === '#7B5CFF') return '<span class="chip chip-jogoo">&#9679; Jogoo Rd</span>';
+  if (color === '#FF5722') return '<span class="chip chip-mombasa">&#9679; Mombasa Rd</span>';
+  if (color === '#FFC400') return '<span class="chip chip-yellow">&#9679; Eastleigh</span>';
+  return '';
+}
+
+function buildCardStepLine(vehicleLegs) {
+  let html = '';
+  vehicleLegs.forEach((leg, i) => {
+    const color = routeColor(leg.route.name);
+    html += `<div class="card-step-node" style="background:${i === 0 ? 'var(--text-secondary)' : color}"></div>`;
+    html += `<div class="card-step-track" style="background:${color}"></div>`;
+  });
+  const lastColor = routeColor(vehicleLegs[vehicleLegs.length - 1].route.name);
+  html += `<div class="card-step-node" style="background:${lastColor}"></div>`;
+  return `<div class="card-step-line">${html}</div>`;
 }
 
 // ─── Autocomplete ──────────────────────────────────────────
@@ -327,28 +349,46 @@ function navigateToStage(stop) {
 
 async function renderRoute(route, requestedTime) {
   const legs        = route.legs;
-  const dep         = fmt(route.departureTime());
-  const arr         = fmt(route.arrivalTime());
-  const dur         = fmtDuration(route.totalDuration());
   const vehicleLegs = legs.filter(l => 'departureTime' in l);
   const transfers   = vehicleLegs.length - 1;
   const si          = getStopsIndex();
   const routeStops  = await getRouteStops();
 
+  const durMins      = Math.round(route.totalDuration().toSeconds() / 60);
+  const primaryLeg   = vehicleLegs[0];
+  const fareId       = `plan-fare-${primaryLeg.route.name.replace(/[^a-z0-9]/gi, '-')}`;
+  const routeNames   = vehicleLegs.map(l => l.route.name).join(' → ');
+  const routeLabel   = vehicleLegs.length === 1 ? `Route ${routeNames}` : `Routes ${routeNames}`;
+  const stopSeq      = [
+    vehicleLegs[0].from.name,
+    ...vehicleLegs.slice(1).map(l => l.from.name),
+    vehicleLegs[vehicleLegs.length - 1].to.name,
+  ].join(' → ');
+
+  const corridor     = corridorChip(primaryLeg.route.name);
+  const directChip   = transfers === 0 ? '<span class="chip chip-direct">Direct</span>' : '';
+  const xferChip     = transfers > 0 ? `<span class="chip chip-xfer">${transfers} transfer${transfers > 1 ? 's' : ''}</span>` : '';
+  const cardStepLine = buildCardStepLine(vehicleLegs);
   const stepLineHtml = renderStepLine(legs, routeStops, si);
 
   el('plan-results-list').innerHTML = `
-    <div class="route-card">
-      <div class="route-card__times">
-        <span class="route-time route-time--dep">${dep}</span>
-        <span class="route-arrow">→</span>
-        <span class="route-time route-time--arr">${arr}</span>
-        <span class="route-duration">
-          <svg style="width:12px;height:12px;vertical-align:middle;margin-right:3px"><use href="#icon-clock"/></svg>
-          ${dur}
-          ${transfers > 0 ? `<span style="margin-left:6px;opacity:.7">· ${transfers} transfer${transfers > 1 ? 's' : ''}</span>` : ''}
-        </span>
+    <div class="route-card best">
+      <div class="card-top">
+        <div class="card-tags">
+          ${corridor}
+          ${directChip}
+          <span class="chip chip-best">Best</span>
+          ${xferChip}
+        </div>
+        <span class="fare-badge" id="${fareId}">KSh —</span>
       </div>
+      <div class="card-time-row">
+        <div class="card-time">${durMins}</div>
+        <div class="card-time-unit">min</div>
+      </div>
+      <div class="card-route-name">${routeLabel}</div>
+      <div class="card-route-detail">${stopSeq}</div>
+      ${cardStepLine}
       ${stepLineHtml}
       <div style="padding-top:10px;border-top:1px solid var(--surface-2)">
         <button id="plan-report-btn"
@@ -358,7 +398,6 @@ async function renderRoute(route, requestedTime) {
         </button>
       </div>
     </div>
-    <p style="font-size:11px;color:var(--text-secondary);text-align:center;margin:8px 0 0">Tap a leg to see all stops</p>
   `;
 
   // Wire step-line navigate buttons (from step-line.js)
@@ -370,7 +409,6 @@ async function renderRoute(route, requestedTime) {
   });
 
   // Wire report button
-  const primaryLeg = vehicleLegs[0];
   el('plan-report-btn')?.addEventListener('click', () => {
     showDeviationSheet(
       `R${primaryLeg.route.name}`,
@@ -395,7 +433,7 @@ async function enrichLegFares(legs) {
       const minP50 = Math.min(...aggs.map(a => a.p50_kes));
       const fareId = `plan-fare-${leg.route.name.replace(/[^a-z0-9]/gi, '-')}`;
       const fareEl = document.getElementById(fareId);
-      if (fareEl) fareEl.textContent = `from ~KSh ${minP50}`;
+      if (fareEl) fareEl.textContent = `~KSh ${minP50}`;
     } catch { /* offline or no data — silent */ }
   }
 }
@@ -714,7 +752,7 @@ function setResultState(mode, message) {
       resultsEl.innerHTML = `
         <div class="results-section">
           <div class="results-header">
-            <span class="results-title">Best route</span>
+            <span class="results-title">Route found</span>
             <button class="star-btn" id="plan-star-btn" aria-label="Save journey">
               <svg viewBox="0 0 24 24" style="width:18px;height:18px">
                 <path d="M17 3H7c-1.1 0-2 .9-2 2v16l7-3 7 3V5c0-1.1-.9-2-2-2z"/>

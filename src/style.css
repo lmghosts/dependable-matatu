@@ -618,31 +618,64 @@ svg { display: block; }
   padding: 16px;
   margin-bottom: 12px;
 }
-.route-card__times {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  margin-bottom: 12px;
+.route-card.best {
+  border-color: var(--accent-flame);
+  box-shadow: 0 0 0 1px rgba(255,87,34,.18), 0 0 28px rgba(255,87,34,.08);
 }
-.route-time {
+
+/* ─── Card chips ─── */
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600;
+  font-family: 'Space Grotesk', sans-serif; letter-spacing: .02em;
+  white-space: nowrap;
+}
+.chip-thika   { background: rgba(46,196,240,.15);  color: var(--line-thika); }
+.chip-ngong   { background: rgba(31,184,118,.15);  color: var(--line-ngong); }
+.chip-jogoo   { background: rgba(123,92,255,.15);  color: var(--line-jogoo); }
+.chip-mombasa { background: rgba(255,87,34,.15);   color: var(--accent-flame); }
+.chip-yellow  { background: rgba(255,196,0,.15);   color: var(--accent-sun); }
+.chip-direct  { background: rgba(31,184,118,.15);  color: var(--accent-green); }
+.chip-best    { background: var(--accent-flame);   color: #fff; }
+.chip-xfer    { background: rgba(123,92,255,.15);  color: var(--accent-violet); }
+
+/* ─── Card layout ─── */
+.card-top {
+  display: flex; justify-content: space-between;
+  align-items: flex-start; margin-bottom: 10px; gap: 8px;
+}
+.card-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.fare-badge {
+  background: rgba(255,196,0,.12); color: var(--accent-sun);
+  padding: 4px 10px; border-radius: var(--r-pill);
+  font-size: 12px; font-weight: 700;
   font-family: 'Space Grotesk', sans-serif;
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -.04em;
-  line-height: 1;
+  white-space: nowrap; flex-shrink: 0;
 }
-.route-time--dep { color: var(--text-primary); }
-.route-time--arr { color: var(--text-secondary); font-size: 24px; }
-.route-arrow { color: var(--text-secondary); font-size: 16px; margin: 0 4px; }
-.route-duration {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--accent-sky);
-  background: rgba(46,196,240,.1);
-  border-radius: var(--r-pill);
-  padding: 4px 10px;
+.card-time-row { display: flex; align-items: baseline; gap: 5px; margin-bottom: 3px; }
+.card-time {
+  font-family: 'Space Grotesk', sans-serif; font-size: 36px; font-weight: 700;
+  color: var(--text-primary); letter-spacing: -.03em; line-height: 1;
 }
+.card-time-unit { font-size: 14px; color: var(--text-secondary); }
+.card-route-name {
+  font-size: 15px; font-weight: 600; color: var(--text-primary);
+  font-family: 'Space Grotesk', sans-serif; margin-bottom: 2px;
+}
+.card-route-detail { font-size: 13px; color: var(--text-secondary); margin-bottom: 12px; }
+
+/* ─── Horizontal mini step-line (card summary) ─── */
+.card-step-line { display: flex; align-items: center; margin-bottom: 14px; }
+.card-step-node { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.card-step-track {
+  flex: 1; height: 2px; max-width: 52px;
+  transform-origin: left center;
+  animation: trackDraw 550ms cubic-bezier(.4,0,.2,1) both;
+}
+.route-card.best .card-step-track { box-shadow: 0 0 7px 1px rgba(46,196,240,.45); }
+@keyframes trackDraw { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) { .card-step-track { animation: none; } }
 
 .route-legs {
   display: flex;

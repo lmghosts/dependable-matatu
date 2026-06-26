@@ -1,7 +1,7 @@
 // ─── Helpers ───────────────────────────────────────────────
 function fmt(time) { return time.toString().substring(0, 5); }
 
-function routeColor(name) {
+export function routeColor(name) {
   const n = String(name);
   if (/^(104|237|145|44[GKZ]?|45[KGP]?|17[AB]?|239|133)/.test(n)) return '#2EC4F0';
   if (/^(33|34[BJL]?|110[A-Z]*)/.test(n))                           return '#FF5722';
