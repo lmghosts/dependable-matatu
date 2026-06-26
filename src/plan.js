@@ -5,6 +5,7 @@ import { fetchAggregates, submitReport } from './lib/supabase.js';
 import { enqueue } from './lib/offline-queue.js';
 import { getDeviceId } from './lib/device-id.js';
 import { initTransitMap } from './transit-map.js';
+// transit-map.js is now a pure SVG renderer — no external tiles
 import { renderStepLine, wireStepNavButtons } from './step-line.js';
 
 function esc(s) {

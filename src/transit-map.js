@@ -45,7 +45,7 @@ function buildStopMarkers(si, routableStops) {
     const sw    = isTerminal ? 2 : 1.5;
     const inner = isExchange ? `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(r*0.45).toFixed(1)}" fill="#F5F3EE" opacity="0.9"/>` : '';
     circles.push(
-      `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="#0E0F12" stroke="#F5F3EE" stroke-width="${sw}" opacity="0.9"/>${inner}`
+      `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="none" stroke="#F5F3EE" stroke-width="${sw}" opacity="0.9"/>${inner}`
     );
   }
   return circles.join('');
