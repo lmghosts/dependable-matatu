@@ -25,6 +25,30 @@ async function getRouteStops() {
   return _routeStops;
 }
 
+// ─── Routable stop index ───────────────────────────────────
+// Maps sourceStopId → route count derived from timetable trip data.
+// Stops absent from this map have 0 trip service and are filtered out.
+// Within search results, stops are sorted by count so the most-connected
+// variant of a name (e.g. "Kahawa Sukari") appears first.
+let _routableStops = null;
+
+async function loadRoutableStops() {
+  if (_routableStops) return;
+  try {
+    const res = await fetch('/routable-stops.json');
+    _routableStops = await res.json();
+  } catch {
+    _routableStops = {};
+  }
+}
+
+function rankStops(stops) {
+  if (!_routableStops) return stops;
+  return stops
+    .filter(s => _routableStops[s.sourceStopId] !== undefined)
+    .sort((a, b) => (_routableStops[b.sourceStopId] ?? 0) - (_routableStops[a.sourceStopId] ?? 0));
+}
+
 // ─── State ─────────────────────────────────────────────────
 const state = {
   from: null,        // { stop, name }
@@ -82,8 +106,8 @@ function renderSuggestions(query) {
   const trimmed = query.trim();
 
   if (trimmed.length < 1) {
-    // Show first ~8 stops from the index as a browse list
-    const nearby = getAllStops(si).slice(0, 8);
+    // Show first ~8 routable stops as a browse list
+    const nearby = rankStops(getAllStops(si)).slice(0, 8);
     if (!nearby.length) {
       list.innerHTML = `<p class="autocomplete-empty">Type to search for stops</p>`;
       return;
@@ -107,10 +131,11 @@ function renderSuggestions(query) {
     return;
   }
 
-  const results = si.findStopsByName(trimmed);
+  // Filter to stops with trip service, sorted by route count (most-connected first)
+  const results = rankStops(si.findStopsByName(trimmed));
 
   if (!results.length) {
-    list.innerHTML = `<p class="autocomplete-empty">No stops found for "${trimmed}"</p>`;
+    list.innerHTML = `<p class="autocomplete-empty">No stops found for "${trimmed}" — try a nearby stage name</p>`;
     return;
   }
 
@@ -925,6 +950,10 @@ export function initPlan() {
 
   // Schematic map renders immediately — no graph dependency
   renderRouteMapBg();
+
+  // Pre-load routable stops index and route stops so both are ready before first keystroke
+  loadRoutableStops();
+  getRouteStops();
 
   // Update GTFS meta label when graph loads
   document.addEventListener('graph:ready', e => {
