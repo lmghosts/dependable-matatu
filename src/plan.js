@@ -301,6 +301,27 @@ async function findRoute() {
   }
 }
 
+// ─── Navigate to stage ─────────────────────────────────────
+function navigateToStage(stop) {
+  const { lat, lon, name } = stop;
+  const label = encodeURIComponent(name);
+  // geo: URI — Android opens the device's preferred maps app (chooser)
+  // Google Maps URL — universal fallback, also deep-links into the app
+  const geoUri  = `geo:${lat},${lon}?q=${lat},${lon}(${label})`;
+  const mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&destination_place_id=${label}&travelmode=walking`;
+  // Try geo: first; if the browser/webview can't handle it, fall back to Maps URL
+  const a = document.createElement('a');
+  a.href = geoUri;
+  a.target = '_blank';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Fallback: if still on the same page after 500ms, open Google Maps
+  setTimeout(() => {
+    if (!document.hidden) window.open(mapsUrl, '_blank');
+  }, 500);
+}
+
 function renderRoute(route, requestedTime) {
   const legs = route.legs;
   const dep = fmt(route.departureTime());
@@ -331,6 +352,11 @@ function renderRoute(route, requestedTime) {
       </div>`;
   }).join('');
 
+  // Boarding stop — first vehicle leg's from stop
+  const boardingStop = vehicleLegs[0]?.from;
+  const boardingCoords = boardingStop ? getStopsIndex()?.findStopBySourceStopId(boardingStop.sourceStopId) : null;
+  const hasCoords = !!(boardingCoords?.lat && boardingCoords?.lon);
+
   el('plan-results-list').innerHTML = `
     <div class="route-card">
       <div class="route-card__times">
@@ -342,6 +368,14 @@ function renderRoute(route, requestedTime) {
           ${dur}
         </span>
       </div>
+
+      ${hasCoords ? `
+      <button id="plan-nav-stage-btn"
+        style="display:flex;align-items:center;gap:8px;width:100%;padding:10px 0;margin:8px 0 4px;background:none;border:none;border-top:1px solid var(--surface-2);color:var(--accent-sky);font-size:13px;font-weight:600;cursor:pointer;text-align:left">
+        <svg style="width:16px;height:16px;flex-shrink:0"><use href="#icon-pin"/></svg>
+        Navigate to ${esc(boardingStop.name)}
+      </button>` : ''}
+
       <div class="route-legs">${legsHtml}</div>
       ${transfers > 0 ? `<div style="margin-top:10px;font-size:12px;color:var(--text-secondary)">
         <svg style="width:12px;height:12px;vertical-align:middle;margin-right:4px"><use href="#icon-transfer"/></svg>
@@ -365,6 +399,13 @@ function renderRoute(route, requestedTime) {
       showLegDetail(legs[idx]);
     });
   });
+
+  // Wire navigate-to-stage button
+  if (hasCoords) {
+    el('plan-nav-stage-btn')?.addEventListener('click', () => {
+      navigateToStage(boardingCoords);
+    });
+  }
 
   // Wire report button — uses first vehicle leg as the reported route
   const primaryLeg = vehicleLegs[0];
