@@ -96,24 +96,28 @@ async function loadRoutableStops() {
   }
 }
 
-// rankStops for ORIGIN field — require the stop to have boardable trips.
-// Terminal stops (Odeon, Koja, etc.) have arrivals but no departures, so they
-// are NOT in routableStops. They are valid destinations but not valid origins.
+// Sort stops by connectivity (most-connected first).
 function rankStops(stops) {
   if (!_routableStops) return stops;
-  return stops
-    .filter(s => _routableStops[s.sourceStopId] !== undefined)
-    .sort((a, b) => (_routableStops[b.sourceStopId] ?? 0) - (_routableStops[a.sourceStopId] ?? 0));
+  return stops.slice().sort((a, b) =>
+    (_routableStops[b.sourceStopId] ?? 0) - (_routableStops[a.sourceStopId] ?? 0)
+  );
 }
 
-// rankDestStops for DESTINATION field — all stops are valid alight points;
-// sort boardable stops to the top, but include terminals too.
-function rankDestStops(stops) {
-  return stops.slice().sort((a, b) => {
-    const ca = _routableStops?.[a.sourceStopId] ?? 0;
-    const cb = _routableStops?.[b.sourceStopId] ?? 0;
-    return cb - ca;
-  });
+// Group stops by display name. Each group carries ALL matching stop IDs so
+// the routing engine can try every combination and pick the best result.
+// This lets users type "Westlands" and get one result — the app figures out
+// which physical stage to use based on their origin/destination.
+function groupStopsByName(stops) {
+  const groups = new Map();
+  for (const s of stops) {
+    const name = s.name.trim();
+    if (!groups.has(name)) groups.set(name, { name, stops: [], bestCount: 0 });
+    const g = groups.get(name);
+    g.stops.push(s);
+    g.bestCount = Math.max(g.bestCount, _routableStops?.[s.sourceStopId] ?? 0);
+  }
+  return [...groups.values()].sort((a, b) => b.bestCount - a.bestCount);
 }
 
 // ─── State ─────────────────────────────────────────────────
@@ -194,56 +198,43 @@ function renderSuggestions(query) {
 
   const trimmed = query.trim();
 
-  function dirLabel(stop) {
-    const d = _stopDirections?.[stop.sourceStopId];
-    if (!d) return '';
-    return `<span class="ac-dir-tag">→ ${d.to}</span>`;
-  }
-
-  function stopItemHtml(stop) {
+  function groupItemHtml(group) {
     return `
-      <button class="autocomplete-item" data-id="${stop.sourceStopId}" data-name="${stop.name}">
+      <button class="autocomplete-item" data-name="${escAttr(group.name)}">
         <div class="autocomplete-item__icon"><svg><use href="#icon-pin"/></svg></div>
         <div class="autocomplete-item__body">
-          <div class="autocomplete-item__name">${stop.name}</div>
-          <div class="autocomplete-item__sub">${dirLabel(stop)}</div>
+          <div class="autocomplete-item__name">${group.name}</div>
         </div>
       </button>`;
   }
 
-  const isTo = state.activeField === 'to';
-  const rank = isTo ? rankDestStops : rankStops;
+  function wireGroups(groups) {
+    list.querySelectorAll('.autocomplete-item').forEach(btn => {
+      const group = groups.find(g => g.name === btn.dataset.name);
+      if (group) btn.addEventListener('click', () => selectStop(group));
+    });
+  }
 
   if (trimmed.length < 1) {
-    const nearby = rank(getAllStops(si)).slice(0, 8);
-    if (!nearby.length) {
+    const groups = groupStopsByName(rankStops(getAllStops(si))).slice(0, 8);
+    if (!groups.length) {
       list.innerHTML = `<p class="autocomplete-empty">Type to search for stops</p>`;
       return;
     }
-    list.innerHTML = `<div class="autocomplete-section-hd">All stops</div>${nearby.map(stopItemHtml).join('')}`;
-    list.querySelectorAll('.autocomplete-item').forEach(btn => {
-      const stop = nearby.find(s => s.sourceStopId === btn.dataset.id);
-      btn.addEventListener('click', () => selectStop(stop, btn.dataset.name));
-    });
+    list.innerHTML = `<div class="autocomplete-section-hd">All stops</div>${groups.map(groupItemHtml).join('')}`;
+    wireGroups(groups);
     return;
   }
 
-  // For 'to' field: include terminal stops (no departure but valid alight points)
-  const results = rank(si.findStopsByName(trimmed));
+  const groups = groupStopsByName(rankStops(si.findStopsByName(trimmed)));
 
-  if (!results.length) {
+  if (!groups.length) {
     list.innerHTML = `<p class="autocomplete-empty">No stops found for "${trimmed}" — try a nearby stage name</p>`;
     return;
   }
 
-  list.innerHTML = `<div class="autocomplete-section-hd">Results</div>${results.slice(0, 8).map(stopItemHtml).join('')}`;
-
-  list.querySelectorAll('.autocomplete-item').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const stop = results.find(s => s.sourceStopId === btn.dataset.id);
-      selectStop(stop, btn.dataset.name);
-    });
-  });
+  list.innerHTML = `<div class="autocomplete-section-hd">Results</div>${groups.slice(0, 8).map(groupItemHtml).join('')}`;
+  wireGroups(groups);
 }
 
 function getAllStops(si) {
@@ -260,13 +251,16 @@ function getAllStops(si) {
   return results;
 }
 
-function selectStop(stop, name) {
+// group = { name: string, stops: Stop[] } — all physical stages with this name.
+// Routing tries every combination to find the best route automatically.
+function selectStop(group) {
+  const { name, stops } = group;
   if (state.activeField === 'from') {
-    state.from = { stop, name };
+    state.from = { stops, name };
     el('plan-from-text').textContent = name;
     el('plan-from-text').classList.add('filled');
   } else {
-    state.to = { stop, name };
+    state.to = { stops, name };
     el('plan-to-text').textContent = name;
     el('plan-to-text').classList.add('filled');
   }
@@ -310,8 +304,8 @@ async function renderSavedJourneys() {
   section.querySelectorAll('.saved-item__run').forEach(btn => {
     btn.addEventListener('click', () => {
       const { fromId, fromName, toId, toName } = btn.dataset;
-      state.from = { stop: { sourceStopId: fromId }, name: fromName };
-      state.to   = { stop: { sourceStopId: toId },   name: toName };
+      state.from = { stops: [{ sourceStopId: fromId }], name: fromName };
+      state.to   = { stops: [{ sourceStopId: toId }],   name: toName };
       el('plan-from-text').textContent = fromName;
       el('plan-from-text').classList.add('filled');
       el('plan-to-text').textContent = toName;
@@ -328,8 +322,8 @@ async function renderSavedJourneys() {
       renderSavedJourneys();
       const starBtn = el('plan-star-btn');
       if (starBtn &&
-          state.from?.stop.sourceStopId === fromId &&
-          state.to?.stop.sourceStopId   === toId) {
+          state.from?.stops?.[0]?.sourceStopId === fromId &&
+          state.to?.stops?.[0]?.sourceStopId   === toId) {
         starBtn.classList.remove('star-btn--saved');
       }
     });
@@ -360,24 +354,40 @@ async function findRoute() {
 
   try {
     const depTime = Time.fromDate(new Date());
+    let bestRoute = null;
 
-    const query = new Query.Builder()
-      .from(state.from.stop.sourceStopId)
-      .to(state.to.stop.sourceStopId)
-      .departureTime(depTime)
-      .maxTransfers(2)
-      .build();
+    // Try every origin×destination stop combination — different physical stages
+    // for the same name (e.g. 3 "Westlands" stops) may route differently.
+    // Pick the combination that gives the earliest arrival.
+    for (const from of state.from.stops) {
+      for (const to of state.to.stops) {
+        if (from.sourceStopId === to.sourceStopId) continue;
+        try {
+          const query = new Query.Builder()
+            .from(from.sourceStopId)
+            .to(to.sourceStopId)
+            .departureTime(depTime)
+            .maxTransfers(2)
+            .build();
+          const result = router.route(query);
+          const route = result.bestRoute();
+          if (route) {
+            const arr = route.arrivalTime().toSeconds();
+            if (!bestRoute || arr < bestRoute.arrivalTime().toSeconds()) {
+              bestRoute = route;
+            }
+          }
+        } catch { /* this stop pair has no route — try next */ }
+      }
+    }
 
-    const result = router.route(query);
-    const route = result.bestRoute();
-
-    if (!route) {
+    if (!bestRoute) {
       setResultState('no-route');
       return;
     }
 
     setResultState('results');
-    renderRoute(route, depTime);
+    renderRoute(bestRoute, depTime);
   } catch (err) {
     console.error('Routing error:', err);
     setResultState('error', 'Routing failed. Please try again.');
@@ -803,8 +813,8 @@ function setResultState(mode, message) {
       break;
 
     case 'results': {
-      const fromId = state.from.stop.sourceStopId;
-      const toId   = state.to.stop.sourceStopId;
+      const fromId = state.from.stops[0].sourceStopId;
+      const toId   = state.to.stops[0].sourceStopId;
       setDrawerState('open');
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
