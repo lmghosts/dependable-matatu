@@ -24,6 +24,7 @@ export default defineConfig({
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,png,svg,ico}'],
         globIgnores: ['graph/**'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024, // 6MB — allows transit-map.svg (5.24MB)
       },
     }),
   ],
