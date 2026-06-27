@@ -56,7 +56,8 @@ registerRoute(
   })
 );
 
-// ─── Skip waiting immediately ───────────────────────────────
-self.addEventListener('message', e => {
-  if (e.data?.type === 'SKIP_WAITING') self.skipWaiting();
-});
+// ─── Auto-activate on install/update ───────────────────────
+// Skip the "waiting" phase so updates go live on the next page load
+// instead of requiring all tabs to be closed first.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
