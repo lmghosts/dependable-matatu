@@ -1,6 +1,7 @@
 import { getDeviceId }          from './lib/device-id.js';
 import { enqueue, flushQueue }  from './lib/offline-queue.js';
 import { fetchAggregates, submitReport } from './lib/supabase.js';
+import { routeColor }           from './step-line.js';
 
 const el = id => document.getElementById(id);
 
@@ -161,46 +162,82 @@ function renderFareCardLoading() {
   </div>`;
 }
 
-function renderFareCardEmpty() {
+function _corridorLabel(routeName) {
+  const c = routeColor(routeName);
+  if (c === '#2EC4F0') return 'Thika Rd';
+  if (c === '#1FB876') return 'Ngong Rd';
+  if (c === '#7B5CFF') return 'Jogoo Rd';
+  if (c === '#FF5722') return 'Mombasa Rd';
+  if (c === '#FFC400') return 'Eastleigh';
+  return null;
+}
+
+function _confidence(total) {
+  if (total >= 30) return { label: 'High',     pct: 88, color: 'var(--accent-green)' };
+  if (total >= 15) return { label: 'Good',     pct: 65, color: 'var(--accent-green)' };
+  if (total >= 5)  return { label: 'Low',      pct: 35, color: 'var(--accent-sun)' };
+  return               { label: 'Very low', pct: 12, color: 'var(--accent-sun)' };
+}
+
+function renderFareCardEmpty(routeId) {
+  const routeName = (routeId || '').replace(/^R/, '');
+  const dotColor  = routeColor(routeName);
+  const corridor  = _corridorLabel(routeName);
+  const routeLabel = routeName
+    ? (corridor ? `Route ${routeName} · ${corridor}` : `Route ${routeName}`)
+    : '';
+
   return `
-    <div style="background:var(--surface);border-radius:12px;padding:16px;margin:12px 0">
-      <div style="font-size:13px;font-weight:600;color:var(--text-primary);margin-bottom:6px">
-        No fare reports yet for this route
+    <div class="cold-start-card">
+      <div class="cold-start-title">
+        <svg style="width:16px;height:16px;flex-shrink:0"><use href="#icon-warning"/></svg>
+        Cold start
       </div>
-      <p style="font-size:13px;color:var(--text-secondary);margin:0 0 14px;line-height:1.5">
-        Pay what you're charged and report it here — your data helps the next rider.
-      </p>
+      ${routeLabel ? `<div class="fare-card-route" style="margin-bottom:10px"><div class="line-dot" style="background:${dotColor}"></div>${routeLabel}</div>` : ''}
+      <div class="cold-start-body">
+        No fare reports yet for this route. Pay what you're charged and report it here — your data helps the next rider.
+      </div>
       <button id="fares-cold-cta"
-        style="width:100%;padding:12px;background:var(--accent-flame);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer">
-        Report the fare you paid
+        style="width:100%;padding:12px;background:var(--accent-flame);color:#fff;border:none;border-radius:var(--r-btn);font-size:14px;font-weight:600;font-family:'Space Grotesk',sans-serif;cursor:pointer">
+        Report a fare
       </button>
     </div>`;
 }
 
-function renderFareCardData(aggregates) {
-  if (!aggregates.length) return renderFareCardEmpty();
+function renderFareCardData(aggregates, routeId) {
+  if (!aggregates.length) return renderFareCardEmpty(routeId);
 
-  const total = aggregates.reduce((s, r) => s + r.sample_count, 0);
-  const rows = aggregates.slice(0, 5).map(r => `
-    <div class="breakdown-row">
-      <span class="breakdown-amount" style="min-width:140px;font-size:11px">
-        ${r.from_stop} → ${r.to_stop}
-      </span>
-      <span style="font-size:13px;font-weight:600;color:var(--text-primary)">
-        KSh ${r.p50_kes}
-      </span>
-      <span class="breakdown-pct">${r.sample_count}×</span>
-    </div>`).join('');
+  const routeName  = (routeId || '').replace(/^R/, '');
+  const dotColor   = routeColor(routeName);
+  const corridor   = _corridorLabel(routeName);
+  const routeLabel = routeName
+    ? (corridor ? `Route ${routeName} · ${corridor}` : `Route ${routeName}`)
+    : '';
+
+  const minFare = Math.min(...aggregates.map(a => a.p50_kes));
+  const maxFare = Math.max(...aggregates.map(a => a.p50_kes));
+  const total   = aggregates.reduce((s, a) => s + a.sample_count, 0);
+  const conf    = _confidence(total);
+
+  const fareNums = minFare === maxFare
+    ? `<div class="fare-min">${minFare}</div>`
+    : `<div class="fare-min">${minFare}</div><div class="fare-dash">–</div><div class="fare-max">${maxFare}</div>`;
 
   return `
-    <div class="fare-info-card">
-      <div class="fare-info-card__route">Crowd-sourced fares (P50)</div>
-      <div style="margin-top:4px;margin-bottom:12px">
-        <div class="breakdown-card">${rows}</div>
+    <div class="fare-card">
+      <div class="fare-card-label">Fare range</div>
+      ${routeLabel ? `<div class="fare-card-route"><div class="line-dot" style="background:${dotColor}"></div>${routeLabel}</div>` : ''}
+      <div class="fare-range-row">
+        <div class="fare-currency">KSh</div>
+        ${fareNums}
       </div>
-      <p style="font-size:11px;color:var(--text-secondary);margin:0">
-        ${total} report${total === 1 ? '' : 's'} · updated daily
-      </p>
+      <div class="fare-footnote">Based on ${total} rider report${total === 1 ? '' : 's'}</div>
+      <div class="conf-wrap">
+        <div class="conf-header"><span>Confidence</span><span>${conf.label}</span></div>
+        <div class="conf-bar">
+          <div class="conf-fill" style="width:${conf.pct}%;background:${conf.color}"></div>
+        </div>
+      </div>
     </div>`;
 }
 
@@ -223,12 +260,12 @@ async function loadFareCard(routeId) {
   try {
     const aggs = await fetchAggregates(routeId);
     if (card.parentElement) {
-      card.innerHTML = renderFareCardData(aggs);
+      card.innerHTML = renderFareCardData(aggs, routeId);
       if (!aggs.length) wireColdCta();
     }
   } catch {
     if (card.parentElement) {
-      card.innerHTML = renderFareCardEmpty();
+      card.innerHTML = renderFareCardEmpty(routeId);
       wireColdCta();
     }
   }

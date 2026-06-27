@@ -1186,55 +1186,59 @@ svg { display: block; }
 }
 .route-chip__clear:hover { color: var(--text-primary); background: var(--surface-2); }
 
-/* ─── Fare info card ─── */
-.fare-info-card {
+/* ─── Fare hero card ─── */
+.fare-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--r-card);
+  padding: 20px;
+}
+.fare-card-label {
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px;
+}
+.fare-card-route {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600;
+  color: var(--text-secondary); margin-bottom: 14px;
+  display: flex; align-items: center; gap: 7px;
+}
+.line-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.fare-range-row { display: flex; align-items: flex-end; gap: 6px; margin-bottom: 5px; }
+.fare-currency {
+  font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 600;
+  color: var(--accent-sun); margin-bottom: 7px;
+}
+.fare-min {
+  font-family: 'Space Grotesk', sans-serif; font-size: 54px; font-weight: 700;
+  color: var(--text-primary); font-variant-numeric: tabular-nums;
+  letter-spacing: -.04em; line-height: 1;
+}
+.fare-dash { font-size: 28px; color: var(--text-secondary); margin-bottom: 5px; }
+.fare-max {
+  font-family: 'Space Grotesk', sans-serif; font-size: 38px; font-weight: 600;
+  color: var(--text-secondary); font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em; line-height: 1; margin-bottom: 3px;
+}
+.fare-footnote { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.conf-wrap { margin-top: 14px; }
+.conf-header { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.conf-bar { height: 4px; background: var(--surface-2); border-radius: 99px; overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 99px; transition: width .6s ease; }
+
+/* ─── Cold-start notice ─── */
+.cold-start-card {
+  background: rgba(255,196,0,.06);
+  border: 1px solid rgba(255,196,0,.18);
+  border-radius: var(--r-card);
   padding: 16px;
-  margin: 0 16px 12px;
 }
-.fare-info-card__route {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: .08em;
-  margin-bottom: 10px;
+.cold-start-title {
+  font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600;
+  color: var(--accent-sun); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 7px;
 }
-.fare-range {
-  font-family: 'Space Grotesk', sans-serif;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: -.04em;
-  color: var(--text-primary);
-}
-.fare-range__sep { color: var(--text-secondary); margin: 0 6px; font-size: 20px; }
-.confidence-bar-wrap {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.confidence-bar {
-  flex: 1;
-  height: 4px;
-  background: var(--surface-2);
-  border-radius: 2px;
-  overflow: hidden;
-}
-.confidence-fill {
-  height: 100%;
-  background: var(--accent-green);
-  border-radius: 2px;
-  transition: width .6s ease;
-}
-.confidence-pct {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-green);
-  opacity: .65;
+.cold-start-body {
+  font-size: 13px; color: rgba(255,196,0,.65); line-height: 1.6; margin-bottom: 14px;
 }
 
 .breakdown-section {
