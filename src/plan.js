@@ -404,8 +404,8 @@ async function findRoute() {
           const result = router.route(query);
           const route = result.bestRoute();
           if (route) {
-            const arr = route.arrivalTime().toSeconds();
-            if (!bestRoute || arr < bestRoute.arrivalTime().toSeconds()) {
+            const arr = route.arrivalTime().toMinutes();
+            if (!bestRoute || arr < bestRoute.arrivalTime().toMinutes()) {
               bestRoute = route;
             }
           }
