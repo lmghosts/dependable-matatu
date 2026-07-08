@@ -152,6 +152,17 @@ function groupStopsByName(stops, maxMetres = 500) {
   return groups.sort((a, b) => b.bestCount - a.bestCount);
 }
 
+// Returns a direction string like "Uthiru → CBD" for a stop group,
+// sourced from the already-computed _stopDirections map.
+function groupSubLabel(group) {
+  if (!_stopDirections) return '';
+  for (const s of group.stops) {
+    const dir = _stopDirections[s.sourceStopId];
+    if (dir) return `${dir.from} → ${dir.to}`;
+  }
+  return '';
+}
+
 // ─── State ─────────────────────────────────────────────────
 const state = {
   from: null,        // { stop, name }
@@ -211,6 +222,7 @@ function openAutocomplete(field) {
   input.value = (field === 'from' ? state.from?.name : state.to?.name) || '';
   input.placeholder = field === 'from' ? 'From where?' : 'To where?';
   input.focus();
+  input.select(); // select-all so typing replaces the previous value instead of appending
   renderSuggestions(input.value);
 }
 
@@ -231,11 +243,13 @@ function renderSuggestions(query) {
   const trimmed = query.trim();
 
   function groupItemHtml(group) {
+    const sub = groupSubLabel(group);
     return `
       <button class="autocomplete-item" data-name="${escAttr(group.name)}">
         <div class="autocomplete-item__icon"><svg><use href="#icon-pin"/></svg></div>
         <div class="autocomplete-item__body">
           <div class="autocomplete-item__name">${group.name}</div>
+          ${sub ? `<div class="autocomplete-item__sub"><span class="ac-dir-tag">${esc(sub)}</span></div>` : ''}
         </div>
       </button>`;
   }
@@ -385,32 +399,40 @@ async function findRoute() {
   }
 
   try {
-    const depTime = Time.fromDate(new Date());
-    let bestRoute = null;
+    const now    = new Date();
+    const depTime = Time.fromDate(now);
 
-    // Try every origin×destination stop combination — different physical stages
-    // for the same name (e.g. 3 "Westlands" stops) may route differently.
-    // Pick the combination that gives the earliest arrival.
-    for (const from of state.from.stops) {
-      for (const to of state.to.stops) {
-        if (from.sourceStopId === to.sourceStopId) continue;
-        try {
-          const query = new Query.Builder()
-            .from(from.sourceStopId)
-            .to(to.sourceStopId)
-            .departureTime(depTime)
-            .maxTransfers(2)
-            .build();
-          const result = router.route(query);
-          const route = result.bestRoute();
-          if (route) {
-            const arr = route.arrivalTime().toMinutes();
-            if (!bestRoute || arr < bestRoute.arrivalTime().toMinutes()) {
-              bestRoute = route;
+    // The GTFS timetable has trips only up to ~20:00. If no trip is found at the
+    // current time, retry from 05:30 (next morning service start) so users in the
+    // evening still see a usable itinerary rather than a dead empty state.
+    const earlyMorning = Time.fromDate(new Date(now.getFullYear(), now.getMonth(), now.getDate(), 5, 30, 0));
+    let bestRoute = null;
+    let usedFallback = false;
+
+    for (const depCandidate of [depTime, earlyMorning]) {
+      for (const from of state.from.stops) {
+        for (const to of state.to.stops) {
+          if (from.sourceStopId === to.sourceStopId) continue;
+          try {
+            const query = new Query.Builder()
+              .from(from.sourceStopId)
+              .to(to.sourceStopId)
+              .departureTime(depCandidate)
+              .maxTransfers(2)
+              .build();
+            const result = router.route(query);
+            const route = result.bestRoute();
+            if (route) {
+              const arr = route.arrivalTime().toMinutes();
+              if (!bestRoute || arr < bestRoute.arrivalTime().toMinutes()) {
+                bestRoute = route;
+                usedFallback = (depCandidate !== depTime);
+              }
             }
-          }
-        } catch { /* this stop pair has no route — try next */ }
+          } catch { /* this stop pair has no route — try next */ }
+        }
       }
+      if (bestRoute) break; // found at current time — no need to try fallback
     }
 
     if (!bestRoute) {
@@ -418,7 +440,7 @@ async function findRoute() {
       return;
     }
 
-    setResultState('results');
+    setResultState('results', null, usedFallback);
     renderRoute(bestRoute, depTime);
   } catch (err) {
     console.error('Routing error:', err);
@@ -810,7 +832,7 @@ function renderRouteMapBg() {
 }
 
 // ─── State machine ─────────────────────────────────────────
-function setResultState(mode, message) {
+function setResultState(mode, message, usedFallback = false) {
   const resultsEl = el('plan-results');
 
   switch (mode) {
@@ -851,6 +873,11 @@ function setResultState(mode, message) {
       resultsEl.hidden = false;
       resultsEl.innerHTML = `
         <div class="results-section">
+          ${usedFallback ? `
+          <div class="results-offhours-banner">
+            <svg style="width:13px;height:13px;flex-shrink:0"><use href="#icon-warning"/></svg>
+            No service right now — showing tomorrow morning's route
+          </div>` : ''}
           <div class="results-header">
             <span class="results-title">Route found</span>
             <button class="star-btn" id="plan-star-btn" aria-label="Save journey">
@@ -886,7 +913,7 @@ function setResultState(mode, message) {
         <div class="empty-state">
           <div class="empty-state__icon"><svg><use href="#icon-warning"/></svg></div>
           <div class="empty-state__title">No route found</div>
-          <p class="empty-state__sub">No matatu connection between these stops. Try a nearby stage name.</p>
+          <p class="empty-state__sub">No route found — the app tried direct and connecting journeys. Try a more specific stage name (e.g. "Westlands Stage" or "Kangemi Soko").</p>
         </div>`;
       break;
 
