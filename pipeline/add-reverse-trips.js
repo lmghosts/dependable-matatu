@@ -58,6 +58,26 @@ const tripsRaw = zip.getEntry('trips.txt').getData().toString('utf8');
 const stRaw    = zip.getEntry('stop_times.txt').getData().toString('utf8');
 
 const trips     = parse(tripsRaw, { columns: true, skip_empty_lines: true });
+
+// ─── Apply GTFS patch manifest ──────────────────────────────
+// Patches are data-quality label corrections recorded in gtfs-patches.json.
+// Applied here so a fresh GTFS extract gets the fixes on every rebuild.
+const PATCH_MANIFEST = join(__dirname, 'gtfs-patches.json');
+if (existsSync(PATCH_MANIFEST)) {
+  const patches = JSON.parse(readFileSync(PATCH_MANIFEST, 'utf8'));
+  let applied = 0;
+  for (const patch of patches) {
+    const trip = trips.find(t => t.trip_id === patch.trip_id);
+    if (!trip) { console.warn(`[bidir] Patch ${patch.patch_id}: trip_id ${patch.trip_id} not found — skipped`); continue; }
+    if (trip[patch.field] === patch.new_value) { continue; } // already at target
+    trip[patch.field] = patch.new_value;
+    applied++;
+    console.log(`[bidir] Patch ${patch.patch_id}: ${patch.trip_id}.${patch.field} ${patch.old_value}→${patch.new_value}`);
+  }
+  console.log(`[bidir] Manifest: ${applied}/${patches.length} patch(es) applied`);
+} else {
+  console.log('[bidir] No gtfs-patches.json found — skipping patch step');
+}
 const stopTimes = parse(stRaw,    { columns: true, skip_empty_lines: true, cast: false });
 
 console.log(`[bidir] Loaded ${trips.length} trips, ${stopTimes.length} stop_times`);

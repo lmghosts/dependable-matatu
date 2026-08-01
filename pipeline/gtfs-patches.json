@@ -1,0 +1,14 @@
+[
+  {
+    "patch_id": "p001-70048111-direction",
+    "date": "2026-08-01",
+    "author": "pipeline/patch-70048111-direction.mjs",
+    "trip_id": "70048111",
+    "route_id": "70904004810",
+    "field": "direction_id",
+    "old_value": "0",
+    "new_value": "1",
+    "reason": "Labelling error: both trips for route 70904004810 carried direction_id=0. Trip 70048111 (headsign Westlands) is the Yaya→Westlands direction and should carry direction_id=1 per the feed convention (dir=0=toward first segment of route_long_name). Both directions were already routable after bidirectional expansion. This is a data-quality fix; it does not change routing behaviour.",
+    "routing_impact": "none"
+  }
+]
